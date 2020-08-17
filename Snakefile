@@ -29,6 +29,8 @@ rule plink_to_zarr:
         fam_path="raw-data/gt-calls/ukb59384_cal_chr{plink_contig}_v2_s488264.fam"
     output:
         "prep-data/gt-calls/ukb_chr{plink_contig}.zarr"
+    conda:
+        "envs/gwas.yaml"
     log:
         "logs/plink_to_zarr.{plink_contig}.txt"
     params:
@@ -49,6 +51,8 @@ rule bgen_to_zarr:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.zarr"
     params:
         contig_index=lambda wc: bgen_contigs.loc[wc.bgen_contig]['index']
+    conda:
+        "envs/gwas.yaml"
     log:
         "logs/bgen_to_zarr.{bgen_contig}.txt"
     shell:

@@ -1,0 +1,9 @@
+name: snakemake
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    - python=3.8
+    - snakemake=5.22.1
+    - google-cloud-sdk=305.0.0
+    - crc32c
