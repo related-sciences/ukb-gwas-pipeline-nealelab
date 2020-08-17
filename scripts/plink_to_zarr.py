@@ -15,8 +15,7 @@ logging.config.fileConfig("log.ini")
 logger = logging.getLogger(__name__)
 
 def load_contig(paths, contig):
-    contig_name = contig["name"]
-    contig_index = contig["index"]
+    contig_name, contig_index = contig['name'], contig['index']
     logger.info(f"Loading dataset for contig {contig} from {paths['bed_path']}")
     with dask.config.set(scheduler="threads"):
         ds = read_plink(**paths, bim_int_contig=False, count_a1=False)
@@ -48,12 +47,10 @@ def write_contig(output_path, gcs, ds, contig):
         ds.to_zarr(store=store, mode="w", consolidated=True, encoding=encoding)
 
 
-def run(input_path_bed: str, input_path_bim: str, input_path_fam: str, output_path: str, contig_name: str):
+def run(input_path_bed: str, input_path_bim: str, input_path_fam: str, output_path: str, contig_name: str, contig_index: int):
     """Convert UKB PLINK to Zarr"""
     paths = dict(bed_path=input_path_bed, bim_path=input_path_bim, fam_path=input_path_fam)
-    config = ukb.get_config()
-    contigs = {c['name']: c for c in config['contigs']}
-    contig = contigs[contig_name]
+    contig = dict(name=contig_name, index=contig_index)
     gcs = gcsfs.GCSFileSystem()
     ds = load_contig(paths, contig)
     write_contig(output_path, gcs, ds, contig)

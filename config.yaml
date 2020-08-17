@@ -1,0 +1,59 @@
+raw:
+    plink:
+        contigs:
+            # For UKB chromosome codes, see:
+            # https://biobank.ndph.ox.ac.uk/showcase/refer.cgi?id=531
+            # "numeric chromosome label 1-26; 23=X,24=Y,25=XY,26=MT"
+            - {index: 0, code: 1, name: 1}
+            - {index: 1, code: 2, name: 2}
+            - {index: 2, code: 3, name: 3}
+            - {index: 3, code: 4, name: 4}
+            - {index: 4, code: 5, name: 5}
+            - {index: 5, code: 6, name: 6}
+            - {index: 6, code: 7, name: 7}
+            - {index: 7, code: 8, name: 8}
+            - {index: 8, code: 9, name: 9}
+            - {index: 9, code: 10, name: 10}
+            - {index: 10, code: 11, name: 11}
+            - {index: 11, code: 12, name: 12}
+            - {index: 12, code: 13, name: 13}
+            - {index: 13, code: 14, name: 14}
+            - {index: 14, code: 15, name: 15}
+            - {index: 15, code: 16, name: 16}
+            - {index: 16, code: 17, name: 17}
+            - {index: 17, code: 18, name: 18}
+            - {index: 18, code: 19, name: 19}
+            - {index: 19, code: 20, name: 20}
+            - {index: 20, code: 21, name: 21}
+            - {index: 21, code: 22, name: 22}
+            - {index: 22, code: 23, name: X}
+            - {index: 23, code: 24, name: Y}
+            - {index: 24, code: 25, name: XY}
+            - {index: 25, code: 26, name: MT}
+    bgen:
+        contigs:
+            # Same as PLINK w/o Y and MT
+            - {index: 0, code: 1, name: 1}
+            - {index: 1, code: 2, name: 2}
+            - {index: 2, code: 3, name: 3}
+            - {index: 3, code: 4, name: 4}
+            - {index: 4, code: 5, name: 5}
+            - {index: 5, code: 6, name: 6}
+            - {index: 6, code: 7, name: 7}
+            - {index: 7, code: 8, name: 8}
+            - {index: 8, code: 9, name: 9}
+            - {index: 9, code: 10, name: 10}
+            - {index: 10, code: 11, name: 11}
+            - {index: 11, code: 12, name: 12}
+            - {index: 12, code: 13, name: 13}
+            - {index: 13, code: 14, name: 14}
+            - {index: 14, code: 15, name: 15}
+            - {index: 15, code: 16, name: 16}
+            - {index: 16, code: 17, name: 17}
+            - {index: 17, code: 18, name: 18}
+            - {index: 18, code: 19, name: 19}
+            - {index: 19, code: 20, name: 20}
+            - {index: 20, code: 21, name: 21}
+            - {index: 21, code: 22, name: 22}
+            - {index: 22, code: 23, name: X}
+            - {index: 24, code: 25, name: XY}
