@@ -101,12 +101,11 @@ def load_bgen_variants(path: str) -> Dataset:
 
 def load_bgen_samples(path: str) -> Dataset:
     cols = [("id1", "int32"), ("id2", "int32"), ("missing", str), ("sex", str)]
-    # All of the samples csvs have an extra row under the header and I'm not
-    # sure why, except that it might be for type inference?
+    # Example .sample file:
     # head ~/data/rs-ukb/raw-data/gt-imputation/ukb59384_imp_chr4_v3_s487296.sample
     # ID_1 ID_2 missing sex
     # 0 0 0 D
-    # 4476413 4476413 0 1
+    # 123123 123123 0 1  # Actual ids replaced with fake numbers
     df = pd.read_csv(
         path,
         sep=" ",
