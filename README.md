@@ -25,15 +25,17 @@ gcloud components install kubectl
 
 gcloud config set project "$GOOGLE_CLOUD_PROJECT"
 
-# Create cluster with 2 vCPUs and 12G RAM per node
+# Create cluster with 2 vCPUs/12G RAM/100G disk per node
 gcloud container clusters create \
   --machine-type custom-2-12288 \
+  --disk-type pd-standard \
+  --disk-size 100G \
   --num-nodes 1 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
-  ukb-io
+  $CLUSTER_IO
 
 gcloud container clusters get-credentials ukb-io --zone $GCP_ZONE
 

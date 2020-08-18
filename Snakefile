@@ -42,11 +42,12 @@ rule plink_to_zarr:
         "--fam-path={input.fam_path} "
         "--output-path={output} "
         "--contig-name={wildcards.plink_contig} "
-        "--contig-index={params.contig_index}"
+        "--contig-index={params.contig_index} "
+        "2> {log}"
 
 rule bgen_to_zarr:
     input:
-        "raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen"
+        GS.remote("rs-ukb/raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen", keep_local=True)
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.zarr"
     params:
@@ -56,7 +57,7 @@ rule bgen_to_zarr:
     log:
         "logs/bgen_to_zarr.{bgen_contig}.txt"
     shell:
-        "python scripts/bgen_to_zarr.py {input} {output}"
+        "python scripts/bgen_to_zarr.py run --input-path={input} --output-path={output} 2> {log}"
         
 onsuccess:
     print("Workflow finished, no error")

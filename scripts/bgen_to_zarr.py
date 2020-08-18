@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 def run(input_path, output_path):
     print("In bgen_to_zarr:", input_path, output_path)
+    from pathlib import Path
+
+    Path(output_path).touch()
 
 
 if __name__ == "__main__":

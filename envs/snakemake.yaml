@@ -4,6 +4,9 @@ channels:
     - bioconda
 dependencies:
     - python=3.8
-    - snakemake=5.22.1
-    - google-cloud-sdk=305.0.0
-    - crc32c
+    - snakemake=5.22
+    - google-cloud-sdk=305.0
+    - crc32c=2.0
+    - pip
+    - pip:
+        - kubernetes==11.0.0
