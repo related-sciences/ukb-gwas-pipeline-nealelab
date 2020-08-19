@@ -213,7 +213,7 @@ def bgen_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_bgen(paths, contig)
-    ds = ds.sel(variants=slice(0, 1000))  # TODO: remove
+    ds = ds.sel(variants=slice(0, 2000))  # TODO: remove
     save_dataset(output_path, ds, contig, scheduler=scheduler, remote=remote)
 
 

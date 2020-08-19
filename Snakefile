@@ -30,7 +30,7 @@ rule plink_to_zarr:
         bim_path="raw-data/gt-calls/ukb_snp_chr{plink_contig}_v2.bim",
         fam_path="raw-data/gt-calls/ukb59384_cal_chr{plink_contig}_v2_s488264.fam"
     output:
-        "prep-data/gt-calls/ukb_chr{plink_contig}.zarr"
+        directory("prep-data/gt-calls/ukb_chr{plink_contig}.zarr")
     conda:
         "envs/gwas.yaml"
     log:
@@ -45,7 +45,7 @@ rule plink_to_zarr:
         "--output-path={output} "
         "--contig-name={wildcards.plink_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=True "
+        "--remote=False "
         "2> {log}"
 
 
@@ -60,7 +60,7 @@ rule bgen_to_zarr:
         variants_path="raw-data/gt-imputation/ukb_mfi_chr{bgen_contig}_v3.txt",
         samples_path=bgen_samples_path
     output:
-        "prep-data/gt-imputation/ukb_chr{bgen_contig}.zarr"
+        directory("prep-data/gt-imputation/ukb_chr{bgen_contig}")
     params:
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     conda:
@@ -75,7 +75,7 @@ rule bgen_to_zarr:
         "--output-path={output} "
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=True "
+        "--remote=False "
         "2> {log}"
         
 onsuccess:

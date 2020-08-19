@@ -27,6 +27,7 @@ gcloud config set project "$GCP_PROJECT"
 
 # Create cluster with 4 vCPUs/12GiB RAM/100G disk per node (argument is MB)
 # Create cluster with 8 vCPUs/24GiB RAM/200G disk per node (argument is MB)
+# Memory must be multiple of 256 MiB
 gcloud container clusters create \
   --machine-type custom-8-24576 \
   --disk-type pd-standard \
