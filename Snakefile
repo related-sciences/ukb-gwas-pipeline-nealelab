@@ -6,11 +6,17 @@ GS = GSRemoteProvider()
 
 configfile: "config.yaml"
 
+bucket = os.getenv('GCS_BUCKET', config['gcs_bucket'])
+ukb_app_id = os.getenv('UKB_APP_ID', config['ukb_app_id'])
+
+def bucket_path(path):
+    return bucket + '/' + path
+
 def to_df(contigs):
     return pd.DataFrame(contigs).astype(str).set_index('name', drop=False)
+
 plink_contigs = to_df(config['raw']['plink']['contigs'])
 bgen_contigs = to_df(config['raw']['bgen']['contigs'])
-# bucket = os.environ['GCS_BUCKET']
 
 rule all:
     input:
@@ -53,7 +59,7 @@ def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
     return [f"raw-data/gt-imputation/ukb59384_imp_chr{wc.bgen_contig}_v3_s{n_samples}.sample"]
 
-
+# Takes ~12 hr on 8 cores for chr{21,22}
 rule bgen_to_zarr:
     input:
         bgen_path="raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen",
@@ -61,9 +67,9 @@ rule bgen_to_zarr:
         samples_path=bgen_samples_path
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
-    threads: 6 # TODO: how can this be all available cores?
+    threads: config['gke_io_ncpu'] - 1
     params:
-        zarr_path=lambda wc: f"rs-ukb/prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", # TODO: use bucket name variable
+        zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     conda:
         "envs/io.yaml"
@@ -78,26 +84,26 @@ rule bgen_to_zarr:
         "--remote=True "
         "&& touch {output}"
         
-        
+
 # Takes ~45 mins on 4 cores, 12g heap
 rule csv_to_parquet:
     input:
-        #"raw-data/main/ukb41430.csv"
-        "prep-data/main/ukb.1k.csv"
+        f"raw-data/main/ukb{ukb_app_id}.csv"
     output:
-        directory("prep-data/main/ukb.1k.parquet")
-    threads: 7
-#     params:
-#         parquet_path=lambda wcc: f"rs-ukb/prep-data/main/ukb.parquet"
+        "prep-data/main/ukb.ckpt"
+    params:
+        parquet_path=lambda wcc: bucket_path("prep-data/main/ukb.parquet")
     conda:
         "envs/spark.yaml"
     shell:
         "export JAVA_HOME=$CONDA_PREFIX/jre && "
         "export SPARK_DRIVER_MEMORY=12g && "
+        "conda list && "
         "python scripts/convert_main_data.py csv_to_parquet "
         "--input-path={input} "
-        "--output-path={output} "
-        
+        "--output-path={params.parquet_path} && "
+        "gsutil -m -q rsync -d -r {params.parquet_path} gs://{params.parquet_path} && "
+        "touch {output}"
         
 onsuccess:
     print("Workflow finished, no error")

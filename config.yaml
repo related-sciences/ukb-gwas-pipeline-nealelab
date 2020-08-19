@@ -1,3 +1,6 @@
+ukb_app_id: "41430"
+gcs_bucket: "rs-ukb"
+gke_io_ncpu: 8
 raw:
     plink:
         contigs:

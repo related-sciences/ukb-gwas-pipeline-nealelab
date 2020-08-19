@@ -25,11 +25,10 @@ gcloud components install kubectl
 
 gcloud config set project "$GCP_PROJECT"
 
-# Create cluster with 4 vCPUs/12GiB RAM/100G disk per node (argument is MB)
 # Create cluster with 8 vCPUs/24GiB RAM/200G disk per node (argument is MB)
 # Memory must be multiple of 256 MiB
 gcloud container clusters create \
-  --machine-type custom-8-24576 \
+  --machine-type custom-${GKE_IO_NCPU}-24576 \
   --disk-type pd-standard \
   --disk-size 200G \
   --num-nodes 1 \
@@ -37,7 +36,7 @@ gcloud container clusters create \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
-  $GKE_CLUSTER_IO
+  $GKE_IO_NAME
 
 gcloud container clusters get-credentials $GKE_CLUSTER_IO --zone $GCP_ZONE
 
@@ -78,13 +77,10 @@ snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
 
 gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 1 --zone $GCP_ZONE
 
-snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb.parquet
     
 snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb.parquet
+    rs-ukb/prep-data/main/ukb.ckpt
     
     
 # Check on the cluster
