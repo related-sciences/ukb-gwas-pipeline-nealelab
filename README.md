@@ -26,10 +26,11 @@ gcloud components install kubectl
 gcloud config set project "$GCP_PROJECT"
 
 # Create cluster with 4 vCPUs/12GiB RAM/100G disk per node (argument is MB)
+# Create cluster with 8 vCPUs/24GiB RAM/200G disk per node (argument is MB)
 gcloud container clusters create \
-  --machine-type custom-4-12288 \
+  --machine-type custom-8-24576 \
   --disk-type pd-standard \
-  --disk-size 100G \
+  --disk-size 200G \
   --num-nodes 1 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
@@ -54,13 +55,15 @@ gcloud projects add-iam-policy-binding $GCP_PROJECT \
 # Login necessary for GS Read/Write
 gcloud auth application-default login
 
-# Run the workflow
-snakemake --kubernetes --use-conda \
+# Dryrun for workflow
+snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     -np rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
-snakemake --kubernetes --use-conda \
+# Set local cores to 1 so that only one rule runs at a time on cluster hosts
+snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
+# REMOVE SLICE IN CONVERTER
     
 # Check on the cluster
 kubectl get node # Find node name

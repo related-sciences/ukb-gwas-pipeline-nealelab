@@ -2,7 +2,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import dask
 import fire
@@ -121,8 +121,15 @@ def load_bgen_samples(path: str) -> Dataset:
 
 
 def load_bgen_dosage(
-    path: str, contig: Contig, chunks: Union[str, int, tuple] = "auto"
+    path: str, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
+
+    if chunks is None:
+        n_bytes = 536870912  # 512MiB
+        n_variants = 1024
+        n_samples = (n_bytes // 4) // n_variants
+        chunks = (n_variants, n_samples)
+
     ds = read_bgen(path, chunks=chunks)
 
     # Update contig index/names
@@ -136,12 +143,14 @@ def load_bgen_dosage(
 
 
 def load_bgen(
-    paths: BGENPaths, contig: Contig, chunks: Union[str, int, tuple] = "auto"
+    paths: BGENPaths, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
     dsd = load_bgen_dosage(paths.bgen_path, contig, chunks=chunks)
     dsv = load_bgen_variants(paths.variants_path)
     dss = load_bgen_samples(paths.samples_path)
-    return xr.merge([dsv, dss, dsd])
+    # Note that attrs are dropped by default on merge; no_conflicts
+    # will merge any with unlike names or same names with equal values
+    return xr.merge([dsv, dss, dsd], combine_attrs="no_conflicts")
 
 
 def save_dataset(
@@ -160,7 +169,9 @@ def save_dataset(
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=2)
     encoding = {v: {"compressor": compressor} for v in ds}
     logger.info(f"Dataset for contig {contig}:\n{ds}")
-    logger.info(f"Writing dataset for contig {contig} to {output_path}")
+    logger.info(
+        f"Writing dataset for contig {contig} to {output_path} (scheduler={scheduler}, remote={remote})"
+    )
     with dask.config.set(scheduler=scheduler), ProgressBar():
         ds.to_zarr(store=store, mode="w", consolidated=True, encoding=encoding)
 
@@ -202,6 +213,7 @@ def bgen_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_bgen(paths, contig)
+    ds = ds.sel(variants=slice(0, 1000))  # TODO: remove
     save_dataset(output_path, ds, contig, scheduler=scheduler, remote=remote)
 
 
