@@ -17,17 +17,17 @@ See:
 - https://zero-to-jupyterhub.readthedocs.io/en/latest/google/step-zero-gcp.html
 
 ```bash
-source .env
+source env.sh
 
 gcloud init
 
 gcloud components install kubectl
 
-gcloud config set project "$GOOGLE_CLOUD_PROJECT"
+gcloud config set project "$GCP_PROJECT"
 
-# Create cluster with 2 vCPUs/12G RAM/100G disk per node
+# Create cluster with 4 vCPUs/12GiB RAM/100G disk per node (argument is MB)
 gcloud container clusters create \
-  --machine-type custom-2-12288 \
+  --machine-type custom-4-12288 \
   --disk-type pd-standard \
   --disk-size 100G \
   --num-nodes 1 \
@@ -35,20 +35,20 @@ gcloud container clusters create \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
-  $CLUSTER_IO
+  $GKE_CLUSTER_IO
 
-gcloud container clusters get-credentials ukb-io --zone $GCP_ZONE
+gcloud container clusters get-credentials $GKE_CLUSTER_IO --zone $GCP_ZONE
 
 # Grant admin permissions on cluster
 kubectl create clusterrolebinding cluster-admin-binding \
   --clusterrole=cluster-admin \
-  --user=$GOOGLE_EMAIL_ACCOUNT
+  --user=$GCP_USER_EMAIL
   
 # If you see this, add IAM policy as below
 Error from server (Forbidden): clusterrolebindings.rbac.authorization.k8s.io is forbidden: User "XXXXX" cannot create resource "clusterrolebindings" in API group "rbac.authorization.k8s.io" at the cluster scope: requires one of ["container.clusterRoleBindings.create"] permission(s).
 
-gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
-  --member=user:$GOOGLE_EMAIL_ACCOUNT \
+gcloud projects add-iam-policy-binding $GCP_PROJECT \
+  --member=user:$GCP_USER_EMAIL \
   --role=roles/container.admin
 
 # Login necessary for GS Read/Write
@@ -67,7 +67,7 @@ kubectl get node # Find node name
 gcloud compute ssh gke-ukb-io-default-pool-XXXXX
 
 # Remove the cluster
-gcloud container clusters delete ukb-io
+gcloud container clusters delete $GKE_CLUSTER_IO
 ```
 
 ## Debug

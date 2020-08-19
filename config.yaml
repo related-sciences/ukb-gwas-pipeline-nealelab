@@ -33,27 +33,31 @@ raw:
     bgen:
         contigs:
             # Same as PLINK w/o Y and MT
-            - {index: 0, code: 1, name: 1}
-            - {index: 1, code: 2, name: 2}
-            - {index: 2, code: 3, name: 3}
-            - {index: 3, code: 4, name: 4}
-            - {index: 4, code: 5, name: 5}
-            - {index: 5, code: 6, name: 6}
-            - {index: 6, code: 7, name: 7}
-            - {index: 7, code: 8, name: 8}
-            - {index: 8, code: 9, name: 9}
-            - {index: 9, code: 10, name: 10}
-            - {index: 10, code: 11, name: 11}
-            - {index: 11, code: 12, name: 12}
-            - {index: 12, code: 13, name: 13}
-            - {index: 13, code: 14, name: 14}
-            - {index: 14, code: 15, name: 15}
-            - {index: 15, code: 16, name: 16}
-            - {index: 16, code: 17, name: 17}
-            - {index: 17, code: 18, name: 18}
-            - {index: 18, code: 19, name: 19}
-            - {index: 19, code: 20, name: 20}
-            - {index: 20, code: 21, name: 21}
-            - {index: 21, code: 22, name: 22}
-            - {index: 22, code: 23, name: X}
-            - {index: 24, code: 25, name: XY}
+            # See http://biobank.ctsu.ox.ac.uk/crystal/label.cgi?id=263 for 
+            # details on `n_consent_samples` which is "number of linked samples 
+            # (i.e.currently consenting participants) in dataset" used in
+            # .sample file names
+            - {index: 0, code: 1, name: 1, n_consent_samples: 487296}
+            - {index: 1, code: 2, name: 2, n_consent_samples: 487296}
+            - {index: 2, code: 3, name: 3, n_consent_samples: 487296}
+            - {index: 3, code: 4, name: 4, n_consent_samples: 487296}
+            - {index: 4, code: 5, name: 5, n_consent_samples: 487296}
+            - {index: 5, code: 6, name: 6, n_consent_samples: 487296}
+            - {index: 6, code: 7, name: 7, n_consent_samples: 487296}
+            - {index: 7, code: 8, name: 8, n_consent_samples: 487296}
+            - {index: 8, code: 9, name: 9, n_consent_samples: 487296}
+            - {index: 9, code: 10, name: 10, n_consent_samples: 487296}
+            - {index: 10, code: 11, name: 11, n_consent_samples: 487296}
+            - {index: 11, code: 12, name: 12, n_consent_samples: 487296}
+            - {index: 12, code: 13, name: 13, n_consent_samples: 487296}
+            - {index: 13, code: 14, name: 14, n_consent_samples: 487296}
+            - {index: 14, code: 15, name: 15, n_consent_samples: 487296}
+            - {index: 15, code: 16, name: 16, n_consent_samples: 487296}
+            - {index: 16, code: 17, name: 17, n_consent_samples: 487296}
+            - {index: 17, code: 18, name: 18, n_consent_samples: 487296}
+            - {index: 18, code: 19, name: 19, n_consent_samples: 487296}
+            - {index: 19, code: 20, name: 20, n_consent_samples: 487296}
+            - {index: 20, code: 21, name: 21, n_consent_samples: 487296}
+            - {index: 21, code: 22, name: 22, n_consent_samples: 487296}
+            - {index: 22, code: 23, name: X, n_consent_samples: 486645}
+            - {index: 24, code: 25, name: XY, n_consent_samples: 486331}

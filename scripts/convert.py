@@ -2,6 +2,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Union
 
 import dask
 import fire
@@ -119,8 +120,10 @@ def load_bgen_samples(path: str) -> Dataset:
     return ds
 
 
-def load_bgen_dosage(path: str, contig: Contig) -> Dataset:
-    ds = read_bgen(path)
+def load_bgen_dosage(
+    path: str, contig: Contig, chunks: Union[str, int, tuple] = "auto"
+) -> Dataset:
+    ds = read_bgen(path, chunks=chunks)
 
     # Update contig index/names
     ds = transform_contig(ds, contig)
@@ -132,8 +135,10 @@ def load_bgen_dosage(path: str, contig: Contig) -> Dataset:
     return ds
 
 
-def load_bgen(paths: BGENPaths, contig: Contig) -> Dataset:
-    dsd = load_bgen_dosage(paths.bgen_path, contig)
+def load_bgen(
+    paths: BGENPaths, contig: Contig, chunks: Union[str, int, tuple] = "auto"
+) -> Dataset:
+    dsd = load_bgen_dosage(paths.bgen_path, contig, chunks=chunks)
     dsv = load_bgen_variants(paths.variants_path)
     dss = load_bgen_samples(paths.samples_path)
     return xr.merge([dsv, dss, dsd])
@@ -144,7 +149,7 @@ def save_dataset(
     ds: Dataset,
     contig: Contig,
     scheduler: str = "threads",
-    remote: bool = False,
+    remote: bool = True,
 ):
     store = output_path
     if remote:
@@ -168,7 +173,7 @@ def plink_to_zarr(
     contig_name: str,
     contig_index: int,
     scheduler: str = "processes",
-    remote: bool = False,
+    remote: bool = True,
 ):
     """Convert UKB PLINK to Zarr"""
     paths = PLINKPaths(
@@ -186,8 +191,8 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    scheduler: str = "threads",
-    remote: bool = False,
+    scheduler: str = "processes",
+    remote: bool = True,
 ):
     """Convert UKB BGEN to Zarr"""
     paths = BGENPaths(
