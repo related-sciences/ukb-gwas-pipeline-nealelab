@@ -60,8 +60,9 @@ rule bgen_to_zarr:
         variants_path="raw-data/gt-imputation/ukb_mfi_chr{bgen_contig}_v3.txt",
         samples_path=bgen_samples_path
     output:
-        directory("prep-data/gt-imputation/ukb_chr{bgen_contig}")
+        "prep-data/gt-imputation/checkpoint/ukb_chr{bgen_contig}.ckpt"
     params:
+        zarr_path=lambda wc: f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr",
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     conda:
         "envs/gwas.yaml"
@@ -72,11 +73,11 @@ rule bgen_to_zarr:
         "--input-path-bgen={input.bgen_path} "
         "--input-path-variants={input.variants_path} "
         "--input-path-samples={input.samples_path} "
-        "--output-path={output} "
+        "--output-path={params.zarr_path} "
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=False "
-        "2> {log}"
+        "--remote=True "
+        "2> {log}  && touch {output}"
         
 onsuccess:
     print("Workflow finished, no error")

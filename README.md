@@ -59,11 +59,12 @@ gcloud auth application-default login
 # Dryrun for workflow
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    -np rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
+    -np rs-ukb/prep-data/gt-imputation/checkpoint/ukb_chrXY.ckpt
+    
 # Set local cores to 1 so that only one rule runs at a time on cluster hosts
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
+    rs-ukb/prep-data/gt-imputation/checkpoint/ukb_chrXY.ckpt
 # REMOVE SLICE IN CONVERTER
     
 # Check on the cluster
