@@ -60,14 +60,13 @@ rule bgen_to_zarr:
         variants_path="raw-data/gt-imputation/ukb_mfi_chr{bgen_contig}_v3.txt",
         samples_path=bgen_samples_path
     output:
-        "prep-data/gt-imputation/checkpoint/ukb_chr{bgen_contig}.ckpt"
+        "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
+    threads: 6 # TODO: how can this be all available cores?
     params:
-        zarr_path=lambda wc: f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr",
+        zarr_path=lambda wc: f"rs-ukb/prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", # TODO: use bucket name variable
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     conda:
         "envs/gwas.yaml"
-    log:
-        "logs/bgen_to_zarr.{bgen_contig}.txt"
     shell:
         "python scripts/convert.py bgen_to_zarr "
         "--input-path-bgen={input.bgen_path} "
@@ -77,7 +76,7 @@ rule bgen_to_zarr:
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
         "--remote=True "
-        "2> {log}  && touch {output}"
+        "&& touch {output}"
         
 onsuccess:
     print("Workflow finished, no error")
