@@ -59,13 +59,33 @@ gcloud auth application-default login
 # Dryrun for workflow
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    -np rs-ukb/prep-data/gt-imputation/checkpoint/ukb_chrXY.ckpt
+    -np rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
     
 # Set local cores to 1 so that only one rule runs at a time on cluster hosts
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/gt-imputation/checkpoint/ukb_chrXY.ckpt
-# REMOVE SLICE IN CONVERTER
+    rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
+
+# Resize cluster and run on more files:
+gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
+snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/gt-imputation/ukb_chr{21,22}.ckpt
+# Worker running times:
+# 1: 12h 12m
+# 2: 14h 50m
+
+
+gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 1 --zone $GCP_ZONE
+
+snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb.parquet
+    
+snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb.parquet
+    
     
 # Check on the cluster
 kubectl get node # Find node name

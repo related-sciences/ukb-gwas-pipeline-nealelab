@@ -1,0 +1,8 @@
+name: spark
+channels:
+    - conda-forge
+dependencies:
+    - fire
+    - pandas
+    - pyspark=3.0.0
+    - openjdk=8.0.192

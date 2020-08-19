@@ -32,13 +32,13 @@ rule plink_to_zarr:
     output:
         directory("prep-data/gt-calls/ukb_chr{plink_contig}.zarr")
     conda:
-        "envs/gwas.yaml"
+        "envs/io.yaml"
     log:
         "logs/plink_to_zarr.{plink_contig}.txt"
     params:
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
     shell:
-        "python scripts/convert.py plink_to_zarr "
+        "python scripts/convert_genetic_data.py plink_to_zarr "
         "--input-path-bed={input.bed_path} "
         "--input-path-bim={input.bim_path} "
         "--input-path-fam={input.fam_path} "
@@ -60,16 +60,15 @@ rule bgen_to_zarr:
         variants_path="raw-data/gt-imputation/ukb_mfi_chr{bgen_contig}_v3.txt",
         samples_path=bgen_samples_path
     output:
-        "prep-data/gt-imputation/checkpoint/ukb_chr{bgen_contig}.ckpt"
+        "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
+    threads: 6 # TODO: how can this be all available cores?
     params:
-        zarr_path=lambda wc: f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr",
+        zarr_path=lambda wc: f"rs-ukb/prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", # TODO: use bucket name variable
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     conda:
-        "envs/gwas.yaml"
-    log:
-        "logs/bgen_to_zarr.{bgen_contig}.txt"
+        "envs/io.yaml"
     shell:
-        "python scripts/convert.py bgen_to_zarr "
+        "python scripts/convert_genetic_data.py bgen_to_zarr "
         "--input-path-bgen={input.bgen_path} "
         "--input-path-variants={input.variants_path} "
         "--input-path-samples={input.samples_path} "
@@ -77,7 +76,28 @@ rule bgen_to_zarr:
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
         "--remote=True "
-        "2> {log}  && touch {output}"
+        "&& touch {output}"
+        
+        
+# Takes ~45 mins on 4 cores, 12g heap
+rule csv_to_parquet:
+    input:
+        #"raw-data/main/ukb41430.csv"
+        "prep-data/main/ukb.1k.csv"
+    output:
+        directory("prep-data/main/ukb.1k.parquet")
+    threads: 7
+#     params:
+#         parquet_path=lambda wcc: f"rs-ukb/prep-data/main/ukb.parquet"
+    conda:
+        "envs/spark.yaml"
+    shell:
+        "export JAVA_HOME=$CONDA_PREFIX/jre && "
+        "export SPARK_DRIVER_MEMORY=12g && "
+        "python scripts/convert_main_data.py csv_to_parquet "
+        "--input-path={input} "
+        "--output-path={output} "
+        
         
 onsuccess:
     print("Workflow finished, no error")
