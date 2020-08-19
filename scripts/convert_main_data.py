@@ -1,4 +1,4 @@
-"""UKB PLINK/BGEN to Zarr converter"""
+"""UKB main dataset conversion functions"""
 import logging
 import logging.config
 from pathlib import Path

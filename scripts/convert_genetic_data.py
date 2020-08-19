@@ -1,4 +1,4 @@
-"""UKB PLINK/BGEN to Zarr converter"""
+"""UKB PLINK/BGEN to Zarr conversion functions"""
 import logging
 from dataclasses import dataclass
 from pathlib import Path

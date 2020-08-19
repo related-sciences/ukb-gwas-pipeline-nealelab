@@ -77,11 +77,16 @@ snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
 
 gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 1 --zone $GCP_ZONE
 
-    
-snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
+# Convert main dataset to parquet
+snakemake --use-conda --cores=1 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/main/ukb.ckpt
     
+# Extract sample QC from main dataset (as csv)
+snakemake --use-conda --cores=1 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb_sample_qc.csv
+
     
 # Check on the cluster
 kubectl get node # Find node name

@@ -21,13 +21,14 @@ bgen_contigs = to_df(config['raw']['bgen']['contigs'])
 rule all:
     input:
         expand(
-            "prep-data/gt-calls/ukb_chr{plink_contig}.zarr", 
+            "prep-data/gt-calls/ukb_chr{plink_contig}.ckpt", 
             plink_contig=plink_contigs['name']
         ),
         expand(
-            "prep-data/gt-imputation/ukb_chr{bgen_contig}.zarr", 
+            "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt", 
             bgen_contig=bgen_contigs['name']
-        )
+        ),
+        "prep-data/main/ukb.ckpt"
 
 
 rule plink_to_zarr:
@@ -36,30 +37,30 @@ rule plink_to_zarr:
         bim_path="raw-data/gt-calls/ukb_snp_chr{plink_contig}_v2.bim",
         fam_path="raw-data/gt-calls/ukb59384_cal_chr{plink_contig}_v2_s488264.fam"
     output:
-        directory("prep-data/gt-calls/ukb_chr{plink_contig}.zarr")
+        "prep-data/gt-calls/ukb_chr{plink_contig}.ckpt"
+    threads: config['gke_io_ncpu'] - 1
     conda:
         "envs/io.yaml"
-    log:
-        "logs/plink_to_zarr.{plink_contig}.txt"
     params:
+        zarr_path=lambda wc: bucket_path(f"prep-data/gt-calls/ukb_chr{wc.plink_contig}.zarr"),
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
     shell:
         "python scripts/convert_genetic_data.py plink_to_zarr "
         "--input-path-bed={input.bed_path} "
         "--input-path-bim={input.bim_path} "
         "--input-path-fam={input.fam_path} "
-        "--output-path={output} "
+        "--output-path={params.zarr_path} "
         "--contig-name={wildcards.plink_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=False "
-        "2> {log}"
+        "--remote=True "
+        "&& touch {output}"
 
 
 def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
     return [f"raw-data/gt-imputation/ukb59384_imp_chr{wc.bgen_contig}_v3_s{n_samples}.sample"]
 
-# Takes ~12 hr on 8 cores for chr{21,22}
+# Takes ~14 hr on 8 cores for chr{21,22}
 rule bgen_to_zarr:
     input:
         bgen_path="raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen",
@@ -92,18 +93,41 @@ rule csv_to_parquet:
     output:
         "prep-data/main/ukb.ckpt"
     params:
-        parquet_path=lambda wcc: bucket_path("prep-data/main/ukb.parquet")
+        parquet_path=bucket_path("prep-data/main/ukb.parquet")
     conda:
         "envs/spark.yaml"
     shell:
         "export JAVA_HOME=$CONDA_PREFIX/jre && "
         "export SPARK_DRIVER_MEMORY=12g && "
-        "conda list && "
         "python scripts/convert_main_data.py csv_to_parquet "
         "--input-path={input} "
         "--output-path={params.parquet_path} && "
         "gsutil -m -q rsync -d -r {params.parquet_path} gs://{params.parquet_path} && "
         "touch {output}"
+        
+        
+rule extract_sample_qc:
+    input: rules.csv_to_parquet.output
+    output: 
+        "prep-data/main/ukb_sample_qc.csv"
+    params:
+        input_path=bucket_path("prep-data/main/ukb.parquet")
+    conda:
+        "envs/spark.yaml"
+    shell:
+        "python scripts/extract_main_data.py sample_qc {params.input_path} {output}"
+
+# rule test:
+#     input:
+#         f"tmp/input.txt"
+#     output:
+#         "tmp/output/"
+#     conda:
+#         "envs/spark.yaml"
+#     shell:
+#         "mkdir -p {output} && "
+#         "echo '1' > {output}/f1.txt && "
+#         "echo '2' > {output}/f2.txt"
         
 onsuccess:
     print("Workflow finished, no error")
