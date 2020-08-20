@@ -20,7 +20,7 @@ def nlv3_sample_sets(input_path_european_samples: str, output_path: str):
     np.testing.assert_array_equal(df.columns, ["plate", "well"])
     df["in_european_samples"] = True
     # TODO: Outer join to other sample sets when files are available again
-    df.to_csv(output_path, index=False)
+    df.to_csv(output_path, index=False, sep="\t")
 
 
 if __name__ == "__main__":

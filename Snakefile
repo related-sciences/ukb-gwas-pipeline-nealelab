@@ -2,6 +2,9 @@ import pandas as pd
 import os
 import os.path as osp
 from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+
+HTTP = HTTPRemoteProvider()
 GS = GSRemoteProvider()
 
 configfile: "config.yaml"
@@ -106,6 +109,14 @@ rule csv_to_parquet:
         "touch {output}"
         
         
+rule download_data_dictionary:
+    input:
+        HTTP.remote("biobank.ctsu.ox.ac.uk/~bbdatan/Data_Dictionary_Showcase.csv")
+    output:
+        "pipe-data/external/ukb_meta/data_dictionary_showcase.csv"
+    shell:
+        "mv {input} {output}"
+        
 rule extract_sample_qc:
     input: rules.csv_to_parquet.output
     output: 
@@ -132,22 +143,9 @@ rule extract_nealelab_sample_sets:
         "python scripts/extract_external_data.py nlv3_sample_sets "
         "--input-path-european-samples={input.european_samples} "
         "--output-path={output}"
-
-
-# rule test:
-#     input:
-#         f"tmp/input.txt"
-#     output:
-#         "tmp/output/"
-#     conda:
-#         "envs/spark.yaml"
-#     shell:
-#         "mkdir -p {output} && "
-#         "echo '1' > {output}/f1.txt && "
-#         "echo '2' > {output}/f2.txt"
         
 onsuccess:
-    print("Workflow finished, no error")
+    print("Workflow finished successfully")
 
 onerror:
-    print("An error occurred")
+    print("Workflow failed")
