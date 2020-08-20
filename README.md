@@ -71,6 +71,20 @@ gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-
 snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chr{21,22}.ckpt
+# Worker running times:
+# 1: 12h 12m
+# 2: 14h 50m
+
+
+gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 1 --zone $GCP_ZONE
+
+snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb.parquet
+    
+snakemake --kubernetes --use-conda --cores=1 --local-cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb.parquet
     
     
 # Check on the cluster
