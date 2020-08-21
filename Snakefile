@@ -117,6 +117,23 @@ rule extract_sample_qc:
     shell:
         "python scripts/extract_main_data.py sample_qc {params.input_path} {output}"
 
+rule extract_nealelab_sample_sets:
+    input:
+        # This was downloaded manually from the NealeLab results spreadsheet
+        # before all the Dropbox links broke
+        # See: https://docs.google.com/spreadsheets/d/1kvPoupSzsSFBNSztMzl04xMoSC3Kcx3CrjVf4yBmESU/edit?ts=5b5f17db#gid=178908679
+        # TODO: Update to download as separate step when it's possible to get these files
+        european_samples="pipe-data/external/nealelab_v3_20180731/european_samples.tsv"
+    output:
+        "pipe-data/external/nealelab_v3_20180731/extract/sample_sets.csv"
+    conda:
+        "envs/spark.yaml"
+    shell:
+        "python scripts/extract_external_data.py nlv3_sample_sets "
+        "--input-path-european-samples={input.european_samples} "
+        "--output-path={output}"
+
+
 # rule test:
 #     input:
 #         f"tmp/input.txt"
