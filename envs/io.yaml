@@ -1,8 +1,8 @@
 name: io
 channels:
     - conda-forge
-    - defaults
 dependencies:
+    # TODO: pin
     - numpy
     - xarray
     - dask

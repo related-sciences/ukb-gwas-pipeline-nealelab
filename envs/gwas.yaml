@@ -1,7 +1,6 @@
 name: gwas
 channels:
     - conda-forge
-    - defaults
 dependencies:
     - numpy
     - xarray
@@ -10,7 +9,7 @@ dependencies:
     - scipy
     - numba
     - zarr
-    - fire
+    - fire=0.3
     - gcsfs
     - pip
     - pip:
