@@ -9,8 +9,9 @@ GS = GSRemoteProvider()
 
 configfile: "config.yaml"
 
-bucket = os.getenv('GCS_BUCKET', config['gcs_bucket'])
-ukb_app_id = os.getenv('UKB_APP_ID', config['ukb_app_id'])
+bucket = os.getenv('GCS_BUCKET', config['env']['gcs_bucket'])
+ukb_app_id = os.getenv('UKB_APP_ID', config['env']['ukb_app_id'])
+gcp_project = os.getenv('GCP_PROJECT', config['env']['gcp_project'])
 
 def bucket_path(path):
     return bucket + '/' + path
@@ -41,7 +42,7 @@ rule plink_to_zarr:
         fam_path="raw-data/gt-calls/ukb59384_cal_chr{plink_contig}_v2_s488264.fam"
     output:
         "prep-data/gt-calls/ukb_chr{plink_contig}.ckpt"
-    threads: config['gke_io_ncpu'] - 1
+    threads: config['env']['gke_io_ncpu'] - 1
     conda:
         "envs/io.yaml"
     params:
@@ -71,7 +72,7 @@ rule bgen_to_zarr:
         samples_path=bgen_samples_path
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
-    threads: config['gke_io_ncpu'] - 1
+    threads: config['env']['gke_io_ncpu'] - 1
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
@@ -117,6 +118,38 @@ rule download_data_dictionary:
     shell:
         "mv {input} {output}"
         
+rule download_efo_mapping:
+    input:
+        HTTP.remote("https://raw.githubusercontent.com/EBISPOT/EFO-UKB-mappings/6e055ee03dd3c36ed62c1b3c41ac7a50f4864b30/UK_Biobank_master_file.tsv")
+    output:
+        "pipe-data/external/ukb_meta/efo_mapping.csv"
+    shell:
+        "mv {input} {output}"
+        
+rule import_otg_v2d_json:
+    output:
+        "pipe-data/external/otg/20.02.01/v2d.json.ckpt"
+    params:
+        input_path="open-targets-genetics-releases/20.02.01/v2d",
+        output_path=bucket_path("pipe-data/external/otg/20.02.01/v2d.json")
+    shell:
+        # Requester pays bucket requires user project for billing
+        "gsutil -u {gcp_project} -m rsync -r gs://{params.input_path} gs://{params.output_path} && touch {output}"
+        
+rule convert_otg_v2d_to_parquet:
+    input: rules.import_otg_v2d_json.output
+    output:
+        "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
+    conda: 
+        "envs/spark.yaml"
+    run:
+        from pyspark.sql import SparkSession
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.read.json(input[0])
+        df = df.repartition(18)
+        df.write.parquet(output[0])
+        
+        
 rule extract_sample_qc:
     input: rules.csv_to_parquet.output
     output: 
@@ -128,7 +161,7 @@ rule extract_sample_qc:
     shell:
         "python scripts/extract_main_data.py sample_qc {params.input_path} {output}"
 
-rule extract_nealelab_sample_sets:
+rule extract_sample_sets:
     input:
         # This was downloaded manually from the NealeLab results spreadsheet
         # before all the Dropbox links broke
@@ -136,6 +169,8 @@ rule extract_nealelab_sample_sets:
         # TODO: Update to download as separate step when it's possible to get these files
         european_samples="pipe-data/external/nealelab_v3_20180731/european_samples.tsv"
     output:
+        # pipe-data/nealelab_rapid_gwas/import
+        # pipe-data/nealelab_rapid_gwas/run/202008
         "pipe-data/external/nealelab_v3_20180731/extract/sample_sets.csv"
     conda:
         "envs/spark.yaml"
@@ -143,6 +178,7 @@ rule extract_nealelab_sample_sets:
         "python scripts/extract_external_data.py nlv3_sample_sets "
         "--input-path-european-samples={input.european_samples} "
         "--output-path={output}"
+        
         
 onsuccess:
     print("Workflow finished successfully")

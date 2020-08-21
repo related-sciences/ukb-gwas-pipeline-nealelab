@@ -101,7 +101,7 @@ def load_bgen_variants(path: str) -> Dataset:
 
 
 def load_bgen_samples(path: str) -> Dataset:
-    cols = [("id1", "int32"), ("id2", "int32"), ("missing", str), ("sex", str)]
+    cols = [("id1", "int32"), ("id2", "int32"), ("missing", str), ("sex", "uint8")]
     # Example .sample file:
     # head ~/data/rs-ukb/raw-data/gt-imputation/ukb59384_imp_chr4_v3_s487296.sample
     # ID_1 ID_2 missing sex
@@ -115,12 +115,14 @@ def load_bgen_samples(path: str) -> Dataset:
         header=0,
         skiprows=1,  # Skip the first non-header row
     )
+    # id1 always equals id2 and missing is always 0
+    df = df[["id1", "sex"]].rename(columns={"id1": "id"})
     ds = df.rename_axis("samples", axis="rows").to_xarray().drop("samples")
     ds = ds.rename({v: "sample_" + v for v in ds})
     return ds
 
 
-def load_bgen_dosage(
+def load_bgen_probabilities(
     path: str, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
 
@@ -135,13 +137,25 @@ def load_bgen_dosage(
     # Update contig index/names
     ds = transform_contig(ds, contig)
 
-    # Demote to float16 from float32
-    # Look at this first: https://numcodecs.readthedocs.io/en/stable/quantize.html
-    # ds['call_dosage'] = ds['call_dosage'].astype('float16')
+    # Slice off homozygous ref GP and redefine mask
+    call_genotype_probability = ds["call_genotype_probability"][..., 1:]
+    call_genotype_probability_mask = np.isnan(call_genotype_probability).any(
+        dim="genotypes"
+    )
+    ds = ds.drop_vars(["call_genotype_probability", "call_genotype_probability_mask"])
+    ds = ds.assign(
+        call_genotype_probability=call_genotype_probability,
+        call_genotype_probability_mask=call_genotype_probability_mask,
+    )
 
     # Drop most variables since the external tables are more useful
     ds = ds[
-        ["variant_contig", "variant_contig_name", "call_dosage", "call_dosage_mask"]
+        [
+            "variant_contig",
+            "variant_contig_name",
+            "call_genotype_probability",
+            "call_genotype_probability_mask",
+        ]
     ]
     return ds
 
@@ -149,7 +163,7 @@ def load_bgen_dosage(
 def load_bgen(
     paths: BGENPaths, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
-    dsd = load_bgen_dosage(paths.bgen_path, contig, chunks=chunks)
+    dsd = load_bgen_probabilities(paths.bgen_path, contig, chunks=chunks)
     dsv = load_bgen_variants(paths.variants_path)
     dss = load_bgen_samples(paths.samples_path)
     # Note that attrs are dropped by default on merge; no_conflicts
@@ -163,6 +177,7 @@ def save_dataset(
     contig: Contig,
     scheduler: str = "threads",
     remote: bool = True,
+    rescale_gp: bool = True,
 ):
     store = output_path
     if remote:
@@ -170,8 +185,19 @@ def save_dataset(
 
         gcs = gcsfs.GCSFileSystem()
         store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
-    compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=2)
+    compressor = zarr.Blosc(cname="zstd", clevel=7, shuffle=2)
     encoding = {v: {"compressor": compressor} for v in ds}
+    if rescale_gp:
+        # See:
+        # - https://xarray.pydata.org/en/stable/io.html#scaling-and-type-conversions
+        # - https://stackoverflow.com/questions/55512772/how-do-i-encode-nan-values-in-xarray-zarr-with-integer-dtype
+        # - https://www.unidata.ucar.edu/software/netcdf/docs/attribute_conventions.html
+        assert "call_genotype_probability" in ds
+        assert "call_genotype_probability" in encoding
+        encoding["call_genotype_probability"]["dtype"] = "uint8"
+        encoding["call_genotype_probability"]["_FillValue"] = 0
+        encoding["call_genotype_probability"]["add_offset"] = -1.0 / 254.0
+        encoding["call_genotype_probability"]["scale_factor"] = 1.0 / 254.0
     logger.info(f"Dataset for contig {contig}:\n{ds}")
     logger.info(
         f"Writing dataset for contig {contig} to {output_path} (scheduler={scheduler}, remote={remote})"

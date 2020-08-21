@@ -87,7 +87,7 @@ snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/main/ukb_sample_qc.csv
     
-# Extract NealeLab sample sets
+# Extract sample sets
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe-data/external/nealelab_v3_20180731/extract/sample_sets.csv
@@ -96,6 +96,18 @@ snakemake --use-conda --cores=1 \
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe-data/external/ukb_meta/data_dictionary_showcase.csv
+    
+    
+# Import OTG V2D
+snakemake --use-conda --cores=1 -np \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe-data/external/otg/20.02.01/v2d.json.ckpt \
+    rs-ukb/pipe-data/external/otg/20.02.01/v2d.parquet.ckpt
+    
+# Download EFO mapping for OTG
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe-data/external/ukb_meta/efo_mapping.csv
     
 # Check on the cluster
 kubectl get node # Find node name
