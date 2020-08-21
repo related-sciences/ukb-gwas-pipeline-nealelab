@@ -55,7 +55,7 @@ def bgen_samples_path(wc):
 
 
 rule bgen_to_zarr:
-    input:
+    input: # TODO: Don't rerun until deciding on https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/5
         bgen_path="raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen",
         variants_path="raw-data/gt-imputation/ukb_mfi_chr{bgen_contig}_v3.txt",
         samples_path=bgen_samples_path

@@ -135,6 +135,10 @@ def load_bgen_dosage(
     # Update contig index/names
     ds = transform_contig(ds, contig)
 
+    # Demote to float16 from float32
+    # Look at this first: https://numcodecs.readthedocs.io/en/stable/quantize.html
+    # ds['call_dosage'] = ds['call_dosage'].astype('float16')
+
     # Drop most variables since the external tables are more useful
     ds = ds[
         ["variant_contig", "variant_contig_name", "call_dosage", "call_dosage_mask"]
@@ -172,7 +176,8 @@ def save_dataset(
     logger.info(
         f"Writing dataset for contig {contig} to {output_path} (scheduler={scheduler}, remote={remote})"
     )
-    with dask.config.set(scheduler=scheduler), ProgressBar():
+    # Use 60 second update interval on progress bar
+    with dask.config.set(scheduler=scheduler), ProgressBar(dt=60):
         ds.to_zarr(store=store, mode="w", consolidated=True, encoding=encoding)
 
 

@@ -2,7 +2,6 @@ name: spark
 channels:
     - conda-forge
 dependencies:
-    - fire
-    - pandas
+    - fire=0.3
     - pyspark=3.0.0
     - openjdk=8.0.192
