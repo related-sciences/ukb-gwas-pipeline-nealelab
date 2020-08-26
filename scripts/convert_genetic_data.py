@@ -1,17 +1,22 @@
 """UKB PLINK/BGEN to Zarr conversion functions"""
 import logging
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import dask
 import fire
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
 from dask.diagnostics import ProgressBar
 from sgkit_bgen import read_bgen
+from sgkit_bgen.bgen_reader import (
+    rechunk_from_zarr,
+    rechunk_to_zarr,
+    to_fixlen_str_array,
+)
 from sgkit_plink import read_plink
 from xarray import Dataset
 
@@ -43,7 +48,8 @@ def transform_contig(ds: Dataset, contig: Contig) -> Dataset:
     # Preserve the original contig index/name field
     # in case there are multiple (e.g. PAR1, PAR2 within XY)
     ds["variant_contig_name"] = xr.DataArray(
-        np.array(ds.attrs["contigs"])[ds["variant_contig"].values], dims="variants"
+        np.array(ds.attrs["contigs"])[ds["variant_contig"].values].astype("S"),
+        dims="variants",
     )
     # Overwrite contig index with single value matching index
     # for contig name in file name
@@ -97,6 +103,10 @@ def load_bgen_variants(path: str) -> Dataset:
     df = pd.read_csv(path, sep="\t", names=[c[0] for c in cols], dtype=dict(cols))
     ds = df.rename_axis("variants", axis="rows").to_xarray().drop("variants")
     ds = ds.rename({v: "variant_" + v for v in ds})
+    for c in cols:
+        if c[1] == str:
+            v = "variant_" + c[0]
+            ds[v] = to_fixlen_str_array(ds[v])
     return ds
 
 
@@ -125,28 +135,10 @@ def load_bgen_samples(path: str) -> Dataset:
 def load_bgen_probabilities(
     path: str, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
-
-    if chunks is None:
-        n_bytes = 536870912  # 512MiB
-        n_variants = 1024
-        n_samples = (n_bytes // 4) // n_variants
-        chunks = (n_variants, n_samples)
-
-    ds = read_bgen(path, chunks=chunks)
+    ds = read_bgen(path, chunks=chunks, dtype="float16")
 
     # Update contig index/names
     ds = transform_contig(ds, contig)
-
-    # Slice off homozygous ref GP and redefine mask
-    call_genotype_probability = ds["call_genotype_probability"][..., 1:]
-    call_genotype_probability_mask = np.isnan(call_genotype_probability).any(
-        dim="genotypes"
-    )
-    ds = ds.drop_vars(["call_genotype_probability", "call_genotype_probability_mask"])
-    ds = ds.assign(
-        call_genotype_probability=call_genotype_probability,
-        call_genotype_probability_mask=call_genotype_probability_mask,
-    )
 
     # Drop most variables since the external tables are more useful
     ds = ds[
@@ -161,14 +153,62 @@ def load_bgen_probabilities(
 
 
 def load_bgen(
-    paths: BGENPaths, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
-) -> Dataset:
-    dsd = load_bgen_probabilities(paths.bgen_path, contig, chunks=chunks)
+    paths: BGENPaths,
+    contig: Contig,
+    region: Optional[Tuple[int, int]] = None,
+    chunks: Tuple[int, int] = (1000, -1),
+):
+    logger.info(
+        f"Loading BGEN dataset for contig {contig} from "
+        f"{paths.bgen_path} (chunks = {chunks})"
+    )
+    # Load and merge primary + axis datasets
+    dsp = load_bgen_probabilities(paths.bgen_path, contig, chunks=chunks + (-1,))
     dsv = load_bgen_variants(paths.variants_path)
     dss = load_bgen_samples(paths.samples_path)
-    # Note that attrs are dropped by default on merge; no_conflicts
-    # will merge any with unlike names or same names with equal values
-    return xr.merge([dsv, dss, dsd], combine_attrs="no_conflicts")
+    ds = xr.merge([dsv, dss, dsp], combine_attrs="no_conflicts")
+
+    # Apply variant slice if provided
+    if region is not None:
+        ds = ds.isel(variants=slice(region[0], region[1]))
+
+    return ds
+
+
+def rechunk_bgen(
+    ds: Dataset,
+    output: str,
+    contig: Contig,
+    # Chosen with expected shape across all chroms:
+    # normalize_chunks('512MB', shape=(97059328, 487409), dtype='float32')
+    chunks: Tuple[int, int] = (10432, 11313),
+    progress_update_seconds: int = 60,
+    mask_and_scale: bool = False,
+) -> Dataset:
+    logger.info(
+        f"Rechunking BGEN dataset for contig {contig} "
+        f"to {output} (chunks = {chunks})"
+    )
+
+    # Save to local zarr store with desired sample chunking
+    with dask.config.set(scheduler="threads"), ProgressBar(dt=progress_update_seconds):
+        rechunk_to_zarr(
+            ds=ds,
+            store=output,
+            chunk_length=chunks[0],
+            chunk_width=chunks[1],
+            compute=True,
+        )
+
+    # Load local dataset and rechunk with desired variant chunking
+    ds = rechunk_from_zarr(
+        output,
+        chunk_length=chunks[0],
+        chunk_width=chunks[1],
+        # Set to false to skip decoding floats
+        mask_and_scale=False,
+    )
+    return ds
 
 
 def save_dataset(
@@ -177,7 +217,7 @@ def save_dataset(
     contig: Contig,
     scheduler: str = "threads",
     remote: bool = True,
-    rescale_gp: bool = True,
+    progress_update_seconds: int = 60,
 ):
     store = output_path
     if remote:
@@ -185,26 +225,13 @@ def save_dataset(
 
         gcs = gcsfs.GCSFileSystem()
         store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
-    compressor = zarr.Blosc(cname="zstd", clevel=7, shuffle=2)
-    encoding = {v: {"compressor": compressor} for v in ds}
-    if rescale_gp:
-        # See:
-        # - https://xarray.pydata.org/en/stable/io.html#scaling-and-type-conversions
-        # - https://stackoverflow.com/questions/55512772/how-do-i-encode-nan-values-in-xarray-zarr-with-integer-dtype
-        # - https://www.unidata.ucar.edu/software/netcdf/docs/attribute_conventions.html
-        assert "call_genotype_probability" in ds
-        assert "call_genotype_probability" in encoding
-        encoding["call_genotype_probability"]["dtype"] = "uint8"
-        encoding["call_genotype_probability"]["_FillValue"] = 0
-        encoding["call_genotype_probability"]["add_offset"] = -1.0 / 254.0
-        encoding["call_genotype_probability"]["scale_factor"] = 1.0 / 254.0
-    logger.info(f"Dataset for contig {contig}:\n{ds}")
     logger.info(
-        f"Writing dataset for contig {contig} to {output_path} (scheduler={scheduler}, remote={remote})"
+        f"Dataset to save for contig {contig}:\n{ds}\n"
+        f"Writing dataset for contig {contig} to {output_path} "
+        f"(scheduler={scheduler}, remote={remote})"
     )
-    # Use 60 second update interval on progress bar
-    with dask.config.set(scheduler=scheduler), ProgressBar(dt=60):
-        ds.to_zarr(store=store, mode="w", consolidated=True, encoding=encoding)
+    with dask.config.set(scheduler=scheduler), ProgressBar(dt=progress_update_seconds):
+        ds.to_zarr(store=store, mode="w", consolidated=True)
 
 
 def plink_to_zarr(
@@ -214,7 +241,6 @@ def plink_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    scheduler: str = "processes",
     remote: bool = True,
 ):
     """Convert UKB PLINK to Zarr"""
@@ -223,7 +249,7 @@ def plink_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_plink(paths, contig)
-    save_dataset(output_path, ds, contig, scheduler=scheduler, remote=remote)
+    save_dataset(output_path, ds, contig, scheduler="processes", remote=remote)
 
 
 def bgen_to_zarr(
@@ -243,8 +269,11 @@ def bgen_to_zarr(
         samples_path=input_path_samples,
     )
     contig = Contig(name=contig_name, index=contig_index)
+    temp_path = ".".join(output_path.split(".")[:-1]) + "_temp.zarr"
     ds = load_bgen(paths, contig)
-    save_dataset(output_path, ds, contig, scheduler=scheduler, remote=remote)
+    ds = rechunk_bgen(ds, temp_path, contig)
+    save_dataset(output_path, ds, contig, scheduler="threads", remote=remote)
+    shutil.rmtree(temp_path)
 
 
 if __name__ == "__main__":
