@@ -156,7 +156,7 @@ def load_bgen(
     paths: BGENPaths,
     contig: Contig,
     region: Optional[Tuple[int, int]] = None,
-    chunks: Tuple[int, int] = (1000, -1),
+    chunks: Tuple[int, int] = (652, -1),
 ):
     logger.info(
         f"Loading BGEN dataset for contig {contig} from "
@@ -259,7 +259,6 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    scheduler: str = "processes",
     remote: bool = True,
 ):
     """Convert UKB BGEN to Zarr"""
@@ -269,6 +268,7 @@ def bgen_to_zarr(
         samples_path=input_path_samples,
     )
     contig = Contig(name=contig_name, index=contig_index)
+    assert output_path.endswith(".zarr")
     temp_path = ".".join(output_path.split(".")[:-1]) + "_temp.zarr"
     ds = load_bgen(paths, contig)
     ds = rechunk_bgen(ds, temp_path, contig)

@@ -17,6 +17,7 @@ See:
 - https://zero-to-jupyterhub.readthedocs.io/en/latest/google/step-zero-gcp.html
 
 ```bash
+conda activate snakemake
 source env.sh
 
 gcloud init
@@ -31,14 +32,14 @@ gcloud container clusters create \
   --machine-type custom-${GKE_IO_NCPU}-24576 \
   --disk-type pd-standard \
   --disk-size 200G \
-  --num-nodes 1 \
+  --num-nodes 2 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
   $GKE_IO_NAME
 
-gcloud container clusters get-credentials $GKE_CLUSTER_IO --zone $GCP_ZONE
+gcloud container clusters get-credentials $GKE_IO_NAME --zone $GCP_ZONE
 
 # Grant admin permissions on cluster
 kubectl create clusterrolebinding cluster-admin-binding \
@@ -66,7 +67,8 @@ snakemake --kubernetes --use-conda --local-cores=1 \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
 
 # Resize cluster and run on more files:
-gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
+gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
+
 snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chr{21,22}.ckpt

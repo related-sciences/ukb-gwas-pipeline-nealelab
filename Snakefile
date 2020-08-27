@@ -136,18 +136,18 @@ rule import_otg_v2d_json:
         # Requester pays bucket requires user project for billing
         "gsutil -u {gcp_project} -m rsync -r gs://{params.input_path} gs://{params.output_path} && touch {output}"
         
-rule convert_otg_v2d_to_parquet:
-    input: rules.import_otg_v2d_json.output
-    output:
-        "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
-    conda: 
-        "envs/spark.yaml"
-    run:
-        from pyspark.sql import SparkSession
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.json(input[0])
-        df = df.repartition(18)
-        df.write.parquet(output[0])
+# rule convert_otg_v2d_to_parquet:
+#     input: rules.import_otg_v2d_json.output
+#     output:
+#         "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
+#     conda: 
+#         "envs/spark.yaml"
+#     run:
+#         from pyspark.sql import SparkSession
+#         spark = SparkSession.builder.getOrCreate()
+#         df = spark.read.json(input[0])
+#         df = df.repartition(18)
+#         df.write.parquet(output[0])
         
         
 rule extract_sample_qc:
