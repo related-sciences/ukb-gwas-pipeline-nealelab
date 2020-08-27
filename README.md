@@ -85,10 +85,10 @@ snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/main/ukb.ckpt
     
-# Extract sample QC from main dataset (as csv)
+# Extract sample QC from main dataset (as zarr)
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb_sample_qc.csv
+    rs-ukb/prep-data/main/ukb_sample_qc.ckpt
     
 # Extract sample sets
 snakemake --use-conda --cores=1 \

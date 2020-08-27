@@ -7,6 +7,7 @@ from typing import Optional, Tuple, Union
 
 import dask
 import fire
+import gcsfs
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -225,8 +226,6 @@ def save_dataset(
 ):
     store = output_path
     if remote:
-        import gcsfs
-
         gcs = gcsfs.GCSFileSystem()
         store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
     logger.info(

@@ -103,7 +103,6 @@ rule csv_to_parquet:
     conda:
         "envs/spark.yaml"
     shell:
-        "export JAVA_HOME=$CONDA_PREFIX/jre && "
         "export SPARK_DRIVER_MEMORY=12g && "
         "python scripts/convert_main_data.py csv_to_parquet "
         "--input-path={input} "
@@ -155,13 +154,18 @@ rule import_otg_v2d_json:
 rule extract_sample_qc:
     input: rules.csv_to_parquet.output
     output: 
-        "prep-data/main/ukb_sample_qc.csv"
+        "prep-data/main/ukb_sample_qc.ckpt"
     params:
-        input_path=bucket_path("prep-data/main/ukb.parquet")
+        input_path=bucket_path("prep-data/main/ukb.parquet"),
+        output_path=bucket_path("prep-data/main/ukb_sample_qc.zarr")
     conda:
         "envs/spark.yaml"
     shell:
-        "python scripts/extract_main_data.py sample_qc {params.input_path} {output}"
+        "export SPARK_DRIVER_MEMORY=12g && "
+        "python scripts/extract_main_data.py sample_qc "
+        "--input-path={params.input_path} "
+        "--output-path={params.output_path} "
+        "--remote=True"
 
 rule extract_sample_sets:
     input:
@@ -177,6 +181,7 @@ rule extract_sample_sets:
     conda:
         "envs/spark.yaml"
     shell:
+        "export SPARK_DRIVER_MEMORY=12g && "
         "python scripts/extract_external_data.py nlv3_sample_sets "
         "--input-path-european-samples={input.european_samples} "
         "--output-path={output}"

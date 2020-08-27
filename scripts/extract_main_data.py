@@ -4,6 +4,7 @@ import logging.config
 from pathlib import Path
 
 import fire
+import gcsfs
 from pyspark.sql import SparkSession
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
@@ -85,7 +86,7 @@ SAMPLE_QC_COLS = {
 }
 
 
-def sample_qc(input_path: str, output_path: str):
+def sample_qc(input_path: str, output_path: str, remote: bool):
     """Extract sample QC data from main dataset"""
     logger.info(f"Extracting sample qc from {input_path} into {output_path}")
     spark = SparkSession.builder.getOrCreate()
@@ -94,7 +95,39 @@ def sample_qc(input_path: str, output_path: str):
     pdf = pdf.rename(columns=SAMPLE_QC_COLS)
     logger.info("Sample QC info:")
     pdf.info()
-    pdf.to_csv(output_path, sep="\t", index=False)
+
+    logger.info("Converting to Xarray")
+    pc_vars = pdf.filter(regex="^genetic_principal_component").columns.tolist()
+    ds = (
+        pdf[[c for c in pdf if c not in pc_vars]]
+        .rename_axis("samples", axis="rows")
+        .to_xarray()
+        .drop_vars("samples")
+    )
+    pcs = (
+        pdf[pc_vars]
+        .rename_axis("samples", axis="rows")
+        .to_xarray()
+        .drop_vars("samples")
+        .to_array(dim="principal_components")
+        .T
+    )
+    ds = ds.assign(
+        genotype_measurement_plate=ds.genotype_measurement_plate.astype("S"),
+        genotype_measurement_well=ds.genotype_measurement_well.astype("S"),
+        principal_component=pcs.drop_vars("principal_components"),
+    )
+    # Rechunk to enforce stricter dtypes as well as ease
+    # downstream loading/processing of PC array
+    ds = ds.chunk("auto")
+
+    store = output_path
+    if remote:
+        gcs = gcsfs.GCSFileSystem()
+        store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
+
+    logger.info(f"Saving zarr archive at {output_path}")
+    ds.to_zarr(store, mode="w", consolidated=True)
 
 
 if __name__ == "__main__":
