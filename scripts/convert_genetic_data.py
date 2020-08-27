@@ -10,6 +10,7 @@ import fire
 import numpy as np
 import pandas as pd
 import xarray as xr
+import zarr
 from dask.diagnostics import ProgressBar
 from sgkit_bgen import read_bgen
 from sgkit_bgen.bgen_reader import (
@@ -88,7 +89,7 @@ def load_plink(paths: PLINKPaths, contig: Contig) -> Dataset:
     return ds
 
 
-def load_bgen_variants(path: str) -> Dataset:
+def load_bgen_variants(path: str):
     # See: https://github.com/Nealelab/UK_Biobank_GWAS/blob/8f8ee456fdd044ce6809bb7e7492dc98fd2df42f/0.1/09.load_mfi_vds.py
     cols = [
         ("id", str),
@@ -102,11 +103,12 @@ def load_bgen_variants(path: str) -> Dataset:
     ]
     df = pd.read_csv(path, sep="\t", names=[c[0] for c in cols], dtype=dict(cols))
     ds = df.rename_axis("variants", axis="rows").to_xarray().drop("variants")
+    ds["allele"] = xr.concat([ds["allele1_ref"], ds["allele2_alt"]], dim="alleles").T
+    ds = ds.drop_vars(["allele1_ref", "allele2_alt"])
+    for c in cols + [("allele", str)]:
+        if c[0] in ds and c[1] == str:
+            ds[c[0]] = to_fixlen_str_array(ds[c[0]])
     ds = ds.rename({v: "variant_" + v for v in ds})
-    for c in cols:
-        if c[1] == str:
-            v = "variant_" + c[0]
-            ds[v] = to_fixlen_str_array(ds[v])
     return ds
 
 
@@ -156,7 +158,8 @@ def load_bgen(
     paths: BGENPaths,
     contig: Contig,
     region: Optional[Tuple[int, int]] = None,
-    chunks: Tuple[int, int] = (652, -1),
+    # chunks: Tuple[int, int] = (652, -1),
+    chunks: Tuple[int, int] = (326, -1),
 ):
     logger.info(
         f"Loading BGEN dataset for contig {contig} from "
@@ -197,6 +200,7 @@ def rechunk_bgen(
             store=output,
             chunk_length=chunks[0],
             chunk_width=chunks[1],
+            compressor=zarr.Blosc(cname="zstd", clevel=8, shuffle=2),
             compute=True,
         )
 
@@ -250,6 +254,7 @@ def plink_to_zarr(
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_plink(paths, contig)
     save_dataset(output_path, ds, contig, scheduler="processes", remote=remote)
+    logger.info("Done")
 
 
 def bgen_to_zarr(
@@ -274,6 +279,7 @@ def bgen_to_zarr(
     ds = rechunk_bgen(ds, temp_path, contig)
     save_dataset(output_path, ds, contig, scheduler="threads", remote=remote)
     shutil.rmtree(temp_path)
+    logger.info("Done")
 
 
 if __name__ == "__main__":

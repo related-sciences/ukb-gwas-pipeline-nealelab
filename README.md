@@ -26,10 +26,11 @@ gcloud components install kubectl
 
 gcloud config set project "$GCP_PROJECT"
 
-# Create cluster with 8 vCPUs/24GiB RAM/200G disk per node (argument is MB)
-# Memory must be multiple of 256 MiB
+# Create cluster with 8 vCPUs/32GiB RAM/200G disk per node
+# Memory must be multiple of 256 MiB (argument is MiB)
+# TODO increase memory and chunk size (from 326 to 652) before next run
 gcloud container clusters create \
-  --machine-type custom-${GKE_IO_NCPU}-24576 \
+  --machine-type custom-${GKE_IO_NCPU}-32768 \
   --disk-type pd-standard \
   --disk-size 200G \
   --num-nodes 2 \
