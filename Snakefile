@@ -73,6 +73,8 @@ rule bgen_to_zarr:
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     threads: config['env']['gke_io_ncpu'] - 1
+    resources:
+        mem_mb=lambda wc: (config['env']['gke_io_ncpu'] - 1) * 4000
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']

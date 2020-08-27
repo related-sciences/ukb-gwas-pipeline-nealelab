@@ -28,7 +28,6 @@ gcloud config set project "$GCP_PROJECT"
 
 # Create cluster with 8 vCPUs/32GiB RAM/200G disk per node
 # Memory must be multiple of 256 MiB (argument is MiB)
-# TODO increase memory and chunk size (from 326 to 652) before next run
 gcloud container clusters create \
   --machine-type custom-${GKE_IO_NCPU}-32768 \
   --disk-type pd-standard \
@@ -66,6 +65,7 @@ snakemake --kubernetes --use-conda --local-cores=1 \
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
+# Expecting running time on 8vCPU/24G: ~40 minutes
 
 # Resize cluster and run on more files:
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
@@ -117,7 +117,17 @@ kubectl get node # Find node name
 gcloud compute ssh gke-ukb-io-default-pool-XXXXX
 
 # Remove the cluster
-gcloud container clusters delete $GKE_CLUSTER_IO
+gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
+
+# Remove node from running cluster
+# https://pminkov.github.io/blog/removing-a-node-from-a-kubernetes-cluster-on-gke-google-container-engine.html
+kubectl get nodes
+# Find node to delete: gke-ukb-io-1-default-pool-276513bc-48k5
+kubectl drain gke-ukb-io-1-default-pool-276513bc-48k5 --force --ignore-daemonsets
+gcloud container clusters describe ukb-io-1 --zone us-east1-c 
+# Find instance group name: gke-ukb-io-1-default-pool-276513bc-grp
+gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone us-east1-c 
+
 ```
 
 ## Debug

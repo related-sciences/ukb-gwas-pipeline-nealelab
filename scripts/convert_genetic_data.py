@@ -97,9 +97,9 @@ def load_bgen_variants(path: str):
         ("position", "int32"),
         ("allele1_ref", str),
         ("allele2_alt", str),
-        ("maf", float),
+        ("maf", "float32"),
         ("minor_allele", str),
-        ("info", float),
+        ("info", "float32"),
     ]
     df = pd.read_csv(path, sep="\t", names=[c[0] for c in cols], dtype=dict(cols))
     ds = df.rename_axis("variants", axis="rows").to_xarray().drop("variants")
@@ -158,8 +158,7 @@ def load_bgen(
     paths: BGENPaths,
     contig: Contig,
     region: Optional[Tuple[int, int]] = None,
-    # chunks: Tuple[int, int] = (652, -1),
-    chunks: Tuple[int, int] = (326, -1),
+    chunks: Tuple[int, int] = (652, -1),
 ):
     logger.info(
         f"Loading BGEN dataset for contig {contig} from "
@@ -187,6 +186,7 @@ def rechunk_bgen(
     chunks: Tuple[int, int] = (10432, 11313),
     progress_update_seconds: int = 60,
     mask_and_scale: bool = False,
+    clevel: int = 7,
 ) -> Dataset:
     logger.info(
         f"Rechunking BGEN dataset for contig {contig} "
@@ -200,7 +200,7 @@ def rechunk_bgen(
             store=output,
             chunk_length=chunks[0],
             chunk_width=chunks[1],
-            compressor=zarr.Blosc(cname="zstd", clevel=8, shuffle=2),
+            compressor=zarr.Blosc(cname="zstd", clevel=clevel, shuffle=2),
             compute=True,
         )
 
@@ -234,7 +234,9 @@ def save_dataset(
         f"Writing dataset for contig {contig} to {output_path} "
         f"(scheduler={scheduler}, remote={remote})"
     )
-    with dask.config.set(scheduler=scheduler), ProgressBar(dt=progress_update_seconds):
+    with dask.config.set(scheduler=scheduler), dask.config.set(
+        {"optimization.fuse.ave-width": 50}
+    ), ProgressBar(dt=progress_update_seconds):
         ds.to_zarr(store=store, mode="w", consolidated=True)
 
 
