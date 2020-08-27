@@ -16,6 +16,6 @@ dependencies:
     - pip
     - pip:
         - pysnptools==0.4.20
-        - "--editable=git+https://github.com/pystatgen/sgkit.git@b7e6bfc7f28f4e15760044453f55dee588630bec#egg=sgkit"
+        - "--editable=git+https://github.com/pystatgen/sgkit.git@320ebc9aaf02a6d396c79aa11ec9d03c0db40615#egg=sgkit"
         - "--editable=git+https://github.com/pystatgen/sgkit-plink.git@d8dce229b7a8ed51641f11ec412c8bdb3367902a#egg=sgkit-plink"
-        - "--editable=git+https://github.com/eric-czech/sgkit-bgen.git@fd9dd550b9ec6c6e3ae3c85d35cb7413d30145a2#egg=sgkit-bgen"
+        - "--editable=git+https://github.com/eric-czech/sgkit-bgen.git@f2b33933b2a2a694b742360c81ce3e8e19fb1c0a#egg=sgkit-bgen"

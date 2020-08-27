@@ -73,6 +73,8 @@ rule bgen_to_zarr:
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     threads: config['env']['gke_io_ncpu'] - 1
+    resources:
+        mem_mb=lambda wc: (config['env']['gke_io_ncpu'] - 1) * 4000
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
@@ -136,18 +138,18 @@ rule import_otg_v2d_json:
         # Requester pays bucket requires user project for billing
         "gsutil -u {gcp_project} -m rsync -r gs://{params.input_path} gs://{params.output_path} && touch {output}"
         
-rule convert_otg_v2d_to_parquet:
-    input: rules.import_otg_v2d_json.output
-    output:
-        "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
-    conda: 
-        "envs/spark.yaml"
-    run:
-        from pyspark.sql import SparkSession
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.json(input[0])
-        df = df.repartition(18)
-        df.write.parquet(output[0])
+# rule convert_otg_v2d_to_parquet:
+#     input: rules.import_otg_v2d_json.output
+#     output:
+#         "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
+#     conda: 
+#         "envs/spark.yaml"
+#     run:
+#         from pyspark.sql import SparkSession
+#         spark = SparkSession.builder.getOrCreate()
+#         df = spark.read.json(input[0])
+#         df = df.repartition(18)
+#         df.write.parquet(output[0])
         
         
 rule extract_sample_qc:
