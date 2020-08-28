@@ -130,6 +130,129 @@ gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-poo
 
 ```
 
+
+## Analysis
+
+Create Dask cluster, see:
+
+- https://docs.dask.org/en/latest/setup/kubernetes-helm.html
+- https://zero-to-jupyterhub.readthedocs.io/en/latest/google/step-zero-gcp.html
+
+```
+source env.sh
+gcloud container clusters create \
+  --machine-type n1-standard-8 \
+  --num-nodes 1 \
+  --zone $GCP_ZONE \
+  --node-locations $GCP_ZONE \
+  --cluster-version latest \
+  --scopes storage-rw \
+  $GKE_DASK_NAME
+  
+kubectl create clusterrolebinding cluster-admin-binding \
+  --clusterrole=cluster-admin \
+  --user=$GCP_USER_EMAIL
+  
+gcloud container clusters get-credentials $GKE_DASK_NAME --zone $GCP_ZONE
+
+# Install Helm (follow https://helm.sh/docs/intro/install/#from-script)
+
+helm repo add dask https://helm.dask.org/
+helm repo update
+
+# This will deploy the GKE services on the existing cluster
+# Note: by default, external ips are no longer exposed (see https://stackoverflow.com/questions/62324275/external-ip-not-exposed-helm-dask)
+# but this can be configured with scheduler.serviceType
+# helm install dask/dask --generate-name # Get generic name
+helm install ukb-dask-helm-1 dask/dask 
+
+# Get environment variables and general status message
+helm status ukb-dask-helm-1
+
+helm get all ukb-dask-helm-1
+
+# To upgrade packages installed or change worker resources:
+helm upgrade ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
+# Note that this will work on a live cluster -- no port forwards
+# or other processes need to be restarted (even notebook kernels)
+
+# To manually scale workers:
+kubectl scale deployment/ukb-dask-helm-1-worker --replicas=2
+
+# Check for IPs
+kubectl get services
+
+# Show worker deployment 
+kubectl get deployment/ukb-dask-helm-1-worker
+
+# Remove the release (still need to delete kube cluster separately)
+helm delete ukb-dask-helm-1
+
+#### Access
+
+# Note that by default, external ips are no longer configured, see
+# https://stackoverflow.com/questions/62324275/external-ip-not-exposed-helm-dask.
+# For testing, it can be useful to update these with the following:
+# helm upgrade ukb-dask-helm-1 dask/dask --set jupyter.serviceType=LoadBalancer --set jupyter.serviceType=LoadBalancer
+
+#######################
+# Use Cluster Jupyter #
+#######################
+# This shouldn't be done on a live cluster though.  Port forwarding
+# should be used instead:
+export JUPYTER_NOTEBOOK_PORT=8082
+export DASK_SCHEDULER_UI_PORT=8081
+export DASK_SCHEDULER_PORT=8080
+kubectl port-forward --address 0.0.0.0 --namespace default svc/ukb-dask-helm-1-jupyter $JUPYTER_NOTEBOOK_PORT:80 &
+kubectl port-forward --address 0.0.0.0 --namespace default svc/ukb-dask-helm-1-scheduler $DASK_SCHEDULER_UI_PORT:80 &
+kubectl port-forward --address 0.0.0.0 --namespace default svc/ukb-dask-helm-1-scheduler 8787:80 &
+kubectl port-forward --address 0.0.0.0 --namespace default svc/ukb-dask-helm-1-scheduler $DASK_SCHEDULER_PORT:8786 &
+# Go to localhost:8082 for jupyter (http://localhost:8082/lab password = dask)
+
+# To work from one extra hop away instead:
+# export PROXY_IP="<machine_with_kube_port_forward>"
+# ssh -L $JUPYTER_NOTEBOOK_PORT:localhost:$JUPYTER_NOTEBOOK_PORT $PROXY_IP
+
+#######################
+# Use Local Jupyter #
+#######################
+
+
+#################
+# Load from GCS #
+#################
+
+A useful first test:
+
+```
+from dask.distributed import Client
+import xarray as xr
+import gcsfs
+client = Client()
+fs = gcsfs.GCSFileSystem()
+store = gcsfs.mapping.GCSMap('rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr', gcs=fs, check=True, create=False)
+ds = xr.open_zarr(store)
+```
+
+```
+import zarr
+import xarray as xr
+import gcsfs
+import dask
+from dask.diagnostics import ProgressBar
+from dask.distributed import Client, config
+dask.config.set({"distributed.comm.timeouts.tcp": "50s"})
+client = Client()
+client
+fs = gcsfs.GCSFileSystem()
+store = gcsfs.mapping.GCSMap('rs-ukb/prep-data/gt-imputation/ukb_chr22.zarr', gcs=fs, check=True, create=False)
+ds = xr.open_zarr(store)
+ds
+%%time
+with ProgressBar():
+    cr = ds.call_genotype_probability_mask.mean(dim='samples').compute()
+```
+
 ## Debug
 
 Local (out of GCP):

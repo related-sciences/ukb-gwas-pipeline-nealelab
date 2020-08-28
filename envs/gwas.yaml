@@ -2,6 +2,7 @@ name: gwas
 channels:
     - conda-forge
 dependencies:
+    - python=3.8.0
     - numpy
     - xarray
     - dask
@@ -13,4 +14,4 @@ dependencies:
     - gcsfs
     - pip
     - pip:
-        - "--editable=git+https://github.com/pystatgen/sgkit.git@b7e6bfc7f28f4e15760044453f55dee588630bec#egg=sgkit"
+        - "--editable=git+https://github.com/pystatgen/sgkit.git@320ebc9aaf02a6d396c79aa11ec9d03c0db40615#egg=sgkit"
