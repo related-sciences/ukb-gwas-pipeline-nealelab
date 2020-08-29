@@ -194,6 +194,9 @@ gcloud container clusters resize ukb-dask-1 --node-pool default-pool --num-nodes
 # Remove the release (still need to delete kube cluster separately)
 helm delete ukb-dask-helm-1
 
+gcloud container clusters delete ukb-dask-1 --zone $GCP_ZONE
+```
+
 #### Access
 
 # Note that by default, external ips are no longer configured, see
