@@ -179,11 +179,17 @@ helm upgrade ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
 # To manually scale workers:
 kubectl scale deployment/ukb-dask-helm-1-worker --replicas=2
 
+# Use this to show current cpu/memory allocation on nodes:
+kubectl describe nodes
+
 # Check for IPs
 kubectl get services
 
 # Show worker deployment 
 kubectl get deployment/ukb-dask-helm-1-worker
+
+# Resize to zero temporarily
+gcloud container clusters resize ukb-dask-1 --node-pool default-pool --num-nodes 0 --zone $GCP_ZONE
 
 # Remove the release (still need to delete kube cluster separately)
 helm delete ukb-dask-helm-1
