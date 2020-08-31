@@ -6,9 +6,6 @@ dependencies:
     - fire=0.3
     - pyspark=3.0.0
     - openjdk=8.0.192
-    - zarr
-    - xarray
-    - gcsfs
     # crcmod/crc32c is not detected by gsutil when installed from conda
     # so there is no point in installing them:
     # https://github.com/conda-forge/google-cloud-sdk-feedstock/issues/79

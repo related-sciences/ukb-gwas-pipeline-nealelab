@@ -4,8 +4,6 @@ import logging.config
 from pathlib import Path
 
 import fire
-import gcsfs
-from pyspark.sql import SparkSession
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
 logger = logging.getLogger(__name__)
@@ -13,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 # See here for a description of this resource and its associated fields:
 # http://biobank.ctsu.ox.ac.uk/crystal/label.cgi?id=100313
+# Also here for similar Neale Lab extraction:
+# https://github.com/Nealelab/UK_Biobank_GWAS/blob/master/0.1/00.load_sample_qc_kt.py
 SAMPLE_QC_COLS = {
     "eid": "eid",
     "x22000_0_0": "genotype_measurement_batch",
@@ -86,8 +86,10 @@ SAMPLE_QC_COLS = {
 }
 
 
-def sample_qc(input_path: str, output_path: str, remote: bool):
-    """Extract sample QC data from main dataset"""
+def sample_qc_csv(input_path: str, output_path: str):
+    """Extract sample QC data from main dataset as csv"""
+    from pyspark.sql import SparkSession
+
     logger.info(f"Extracting sample qc from {input_path} into {output_path}")
     spark = SparkSession.builder.getOrCreate()
     df = spark.read.parquet(input_path)
@@ -95,17 +97,26 @@ def sample_qc(input_path: str, output_path: str, remote: bool):
     pdf = pdf.rename(columns=SAMPLE_QC_COLS)
     logger.info("Sample QC info:")
     pdf.info()
+    logger.info(f"Saving csv at {output_path}")
+    pdf.to_csv(output_path, sep="\t", index=False)
+
+
+def sample_qc_zarr(input_path: str, output_path: str, remote: bool):
+    """Convert sample QC csv to zarr"""
+    import gcsfs
+    import pandas as pd
 
     logger.info("Converting to Xarray")
-    pc_vars = pdf.filter(regex="^genetic_principal_component").columns.tolist()
+    df = pd.read_csv(input_path, sep="\t")
+    pc_vars = df.filter(regex="^genetic_principal_component").columns.tolist()
     ds = (
-        pdf[[c for c in pdf if c not in pc_vars]]
+        df[[c for c in df if c not in pc_vars]]
         .rename_axis("samples", axis="rows")
         .to_xarray()
         .drop_vars("samples")
     )
     pcs = (
-        pdf[pc_vars]
+        df[pc_vars]
         .rename_axis("samples", axis="rows")
         .to_xarray()
         .drop_vars("samples")
@@ -126,6 +137,7 @@ def sample_qc(input_path: str, output_path: str, remote: bool):
         gcs = gcsfs.GCSFileSystem()
         store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
 
+    logger.info(f"Sample QC dataset:\n{ds}")
     logger.info(f"Saving zarr archive at {output_path}")
     ds.to_zarr(store, mode="w", consolidated=True)
 

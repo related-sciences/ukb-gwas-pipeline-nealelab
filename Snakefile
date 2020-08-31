@@ -150,22 +150,35 @@ rule import_otg_v2d_json:
 #         df = df.repartition(18)
 #         df.write.parquet(output[0])
         
-        
-rule extract_sample_qc:
+
+rule extract_sample_qc_csv:
     input: rules.csv_to_parquet.output
     output: 
-        "prep-data/main/ukb_sample_qc.ckpt"
+        "prep-data/main/ukb_sample_qc.csv"
     params:
-        input_path=bucket_path("prep-data/main/ukb.parquet"),
-        output_path=bucket_path("prep-data/main/ukb_sample_qc.zarr")
+        input_path=bucket_path("prep-data/main/ukb.parquet")
     conda:
         "envs/spark.yaml"
     shell:
-        "export SPARK_DRIVER_MEMORY=12g && "
-        "python scripts/extract_main_data.py sample_qc "
+        "export SPARK_DRIVER_MEMORY=10g && "
+        "python scripts/extract_main_data.py sample_qc_csv "
         "--input-path={params.input_path} "
+        "--output-path={output} "
+        
+rule extract_sample_qc_zarr:
+    input: rules.extract_sample_qc_csv.output
+    output: 
+        "prep-data/main/ukb_sample_qc.ckpt"
+    params:
+        output_path=bucket_path("prep-data/main/ukb_sample_qc.zarr")
+    conda:
+        "envs/gwas.yaml"
+    shell:
+        "python scripts/extract_main_data.py sample_qc_zarr "
+        "--input-path={input} "
         "--output-path={params.output_path} "
-        "--remote=True"
+        "--remote=True && "
+        "touch {output}"
 
 rule extract_sample_sets:
     input:
@@ -181,7 +194,7 @@ rule extract_sample_sets:
     conda:
         "envs/spark.yaml"
     shell:
-        "export SPARK_DRIVER_MEMORY=12g && "
+        "export SPARK_DRIVER_MEMORY=10g && "
         "python scripts/extract_external_data.py nlv3_sample_sets "
         "--input-path-european-samples={input.european_samples} "
         "--output-path={output}"
