@@ -199,7 +199,8 @@ gcloud container clusters delete ukb-dask-1 --zone $GCP_ZONE
 
 #### Access
 
-# Note that by default, external ips are no longer configured, see
+```
+# By default, Helm external ips are no longer configured, see
 # https://stackoverflow.com/questions/62324275/external-ip-not-exposed-helm-dask.
 # For testing, it can be useful to update these with the following:
 # helm upgrade ukb-dask-helm-1 dask/dask --set jupyter.serviceType=LoadBalancer --set jupyter.serviceType=LoadBalancer
@@ -207,8 +208,7 @@ gcloud container clusters delete ukb-dask-1 --zone $GCP_ZONE
 #######################
 # Use Cluster Jupyter #
 #######################
-# This shouldn't be done on a live cluster though.  Port forwarding
-# should be used instead:
+
 export JUPYTER_NOTEBOOK_PORT=8082
 export DASK_SCHEDULER_UI_PORT=8081
 export DASK_SCHEDULER_PORT=8080
@@ -222,18 +222,12 @@ kubectl port-forward --address 0.0.0.0 --namespace default svc/ukb-dask-helm-1-s
 # export PROXY_IP="<machine_with_kube_port_forward>"
 # ssh -L $JUPYTER_NOTEBOOK_PORT:localhost:$JUPYTER_NOTEBOOK_PORT $PROXY_IP
 
-#######################
+#####################
 # Use Local Jupyter #
-#######################
-
-
-#################
-# Load from GCS #
-#################
+#####################
 
 A useful first test:
 
-```
 from dask.distributed import Client
 import xarray as xr
 import gcsfs
@@ -241,9 +235,8 @@ client = Client()
 fs = gcsfs.GCSFileSystem()
 store = gcsfs.mapping.GCSMap('rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr', gcs=fs, check=True, create=False)
 ds = xr.open_zarr(store)
-```
 
-```
+
 import zarr
 import xarray as xr
 import gcsfs
@@ -260,19 +253,4 @@ ds
 %%time
 with ProgressBar():
     cr = ds.call_genotype_probability_mask.mean(dim='samples').compute()
-```
-
-## Debug
-
-Local (out of GCP):
-
-```bash
-gcloud auth application-default login
-
-snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb -np \
-    rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
-
-snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb --dag \
-    rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
-snakemake --dag data/prep-data/gt-imputation/ukb_chrXY.zarr | dot -Tsvg > dag.svg
 ```
