@@ -32,7 +32,10 @@ rule all:
             "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt", 
             bgen_contig=bgen_contigs['name']
         ),
-        "prep-data/main/ukb.ckpt"
+        "prep-data/main/ukb.ckpt",
+        "pipe-data/external/ukb_meta/data_dictionary_showcase.csv",
+        "prep-data/main/ukb_sample_qc.csv",
+        "prep-data/main/ukb_sample_qc.ckpt"
 
 
 rule plink_to_zarr:
@@ -93,7 +96,7 @@ rule bgen_to_zarr:
         
 
 # Takes ~45 mins on 4 cores, 12g heap
-rule csv_to_parquet:
+rule main_csv_to_parquet:
     input:
         f"raw-data/main/ukb{ukb_app_id}.csv"
     output:
@@ -152,7 +155,7 @@ rule import_otg_v2d_json:
         
 
 rule extract_sample_qc_csv:
-    input: rules.csv_to_parquet.output
+    input: rules.main_csv_to_parquet.output
     output: 
         "prep-data/main/ukb_sample_qc.csv"
     params:

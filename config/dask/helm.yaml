@@ -1,17 +1,17 @@
 # See: https://docs.dask.org/en/latest/setup/kubernetes-helm.html#configure-environment
 worker:
-  # Assume n1-standard-8 
+  # Assume n1-highmem-4 (26GB)
   replicas: 1
   resources:
   # Dask scheduler only seems to respect limits and not requests,
   # so this effectively controls how many workers are created and
   # how much memory they have
     limits:
-      cpu: 2
-      memory: 21G
+      cpu: 1
+      memory: 8G
     requests:
-      cpu: 2
-      memory: 21G
+      cpu: 1
+      memory: 8G
   env:
     - name: EXTRA_CONDA_PACKAGES
       value: numba xarray gcsfs dask-ml numba zarr -c conda-forge

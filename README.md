@@ -141,7 +141,7 @@ Create Dask cluster, see:
 ```
 source env.sh
 gcloud container clusters create \
-  --machine-type n1-standard-8 \
+  --machine-type n1-highmem-4 \
   --num-nodes 1 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
@@ -164,7 +164,7 @@ helm repo update
 # Note: by default, external ips are no longer exposed (see https://stackoverflow.com/questions/62324275/external-ip-not-exposed-helm-dask)
 # but this can be configured with scheduler.serviceType
 # helm install dask/dask --generate-name # Get generic name
-helm install ukb-dask-helm-1 dask/dask 
+helm install ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
 
 # Get environment variables and general status message
 helm status ukb-dask-helm-1
@@ -177,6 +177,7 @@ helm upgrade ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
 # or other processes need to be restarted (even notebook kernels)
 
 # To manually scale workers:
+gcloud container clusters resize ukb-dask-1 --node-pool default-pool --num-nodes 8 --zone $GCP_ZONE
 kubectl scale deployment/ukb-dask-helm-1-worker --replicas=2
 
 # Use this to show current cpu/memory allocation on nodes:
@@ -274,5 +275,6 @@ snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb -np \
 
 snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb --dag \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
+
 snakemake --dag data/prep-data/gt-imputation/ukb_chrXY.zarr | dot -Tsvg > dag.svg
 ```
