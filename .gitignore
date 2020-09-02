@@ -133,3 +133,4 @@ dmypy.json
 data/
 .snakemake
 rs-ukb/
+dask-worker-space
