@@ -67,7 +67,7 @@ def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
     return [f"raw-data/gt-imputation/ukb59384_imp_chr{wc.bgen_contig}_v3_s{n_samples}.sample"]
 
-# Takes ~14 hr on 8 cores for chr{21,22}
+
 rule bgen_to_zarr:
     input: # TODO: Don't rerun until deciding on https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/5
         bgen_path="raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen",
@@ -121,37 +121,6 @@ rule download_data_dictionary:
         "pipe-data/external/ukb_meta/data_dictionary_showcase.csv"
     shell:
         "mv {input} {output}"
-        
-rule download_efo_mapping:
-    input:
-        HTTP.remote("https://raw.githubusercontent.com/EBISPOT/EFO-UKB-mappings/6e055ee03dd3c36ed62c1b3c41ac7a50f4864b30/UK_Biobank_master_file.tsv")
-    output:
-        "pipe-data/external/ukb_meta/efo_mapping.csv"
-    shell:
-        "mv {input} {output}"
-        
-rule import_otg_v2d_json:
-    output:
-        "pipe-data/external/otg/20.02.01/v2d.json.ckpt"
-    params:
-        input_path="open-targets-genetics-releases/20.02.01/v2d",
-        output_path=bucket_path("pipe-data/external/otg/20.02.01/v2d.json")
-    shell:
-        # Requester pays bucket requires user project for billing
-        "gsutil -u {gcp_project} -m rsync -r gs://{params.input_path} gs://{params.output_path} && touch {output}"
-        
-# rule convert_otg_v2d_to_parquet:
-#     input: rules.import_otg_v2d_json.output
-#     output:
-#         "pipe-data/external/otg/20.02.01/v2d.parquet.ckpt"
-#     conda: 
-#         "envs/spark.yaml"
-#     run:
-#         from pyspark.sql import SparkSession
-#         spark = SparkSession.builder.getOrCreate()
-#         df = spark.read.json(input[0])
-#         df = df.repartition(18)
-#         df.write.parquet(output[0])
         
 
 rule extract_sample_qc_csv:
@@ -208,3 +177,22 @@ onsuccess:
 
 onerror:
     print("Workflow failed")
+    
+    
+    
+# rule download_efo_mapping:
+#     input:
+#         HTTP.remote("https://raw.githubusercontent.com/EBISPOT/EFO-UKB-mappings/6e055ee03dd3c36ed62c1b3c41ac7a50f4864b30/UK_Biobank_master_file.tsv")
+#     output:
+#         "pipe-data/external/ukb_meta/efo_mapping.csv"
+#     shell:
+#         "mv {input} {output}"
+# rule import_otg_v2d_json:
+#     output:
+#         "pipe-data/external/otg/20.02.01/v2d.json.ckpt"
+#     params:
+#         input_path="open-targets-genetics-releases/20.02.01/v2d",
+#         output_path=bucket_path("pipe-data/external/otg/20.02.01/v2d.json")
+#     shell:
+#         # Requester pays bucket requires user project for billing
+#         "gsutil -u {gcp_project} -m rsync -r gs://{params.input_path} gs://{params.output_path} && touch {output}"

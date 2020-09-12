@@ -1,23 +1,19 @@
-# ukb-gwas-pipeline-nealelab
+# NealeLab 2018 UK Biobank GWAS Reproduction Pipeline
 
-Pipeline for reproduction of NealeLab 2018 UKB GWAS
+## Local Setup
 
-## Setup
+To run this pipeline, all that is necessary is a local python environment.  This will be used via snakemake to launch any larger jobs on a GKE cluster.
 
 ```bash
 conda env create -f envs/snakemake.yaml 
 conda activate snakemake
 ```
 
-## Execution
+## Cluster Setup
 
-See:
-
-- https://snakemake.readthedocs.io/en/stable/executing/cloud.html
-- https://zero-to-jupyterhub.readthedocs.io/en/latest/google/step-zero-gcp.html
+Create a GKE cluster:
 
 ```bash
-conda activate snakemake
 source env.sh
 
 gcloud init
@@ -39,29 +35,61 @@ gcloud container clusters create \
   --scopes storage-rw \
   $GKE_IO_NAME
 
-gcloud container clusters get-credentials $GKE_IO_NAME --zone $GCP_ZONE
-
 # Grant admin permissions on cluster
+gcloud container clusters get-credentials $GKE_IO_NAME --zone $GCP_ZONE
 kubectl create clusterrolebinding cluster-admin-binding \
   --clusterrole=cluster-admin \
   --user=$GCP_USER_EMAIL
   
-# If you see this, add IAM policy as below
-Error from server (Forbidden): clusterrolebindings.rbac.authorization.k8s.io is forbidden: User "XXXXX" cannot create resource "clusterrolebindings" in API group "rbac.authorization.k8s.io" at the cluster scope: requires one of ["container.clusterRoleBindings.create"] permission(s).
-
+# Note: If you see this, add IAM policy as below
+# Error from server (Forbidden): clusterrolebindings.rbac.authorization.k8s.io is forbidden: 
+# User "XXXXX" cannot create resource "clusterrolebindings" in API group "rbac.authorization.k8s.io" 
+# at the cluster scope: requires one of ["container.clusterRoleBindings.create"] permission(s).
 gcloud projects add-iam-policy-binding $GCP_PROJECT \
   --member=user:$GCP_USER_EMAIL \
   --role=roles/container.admin
+```
+
+
+Modify an existing cluster:
+
+```bash
+source env.sh
+
+## Resize
+gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
+
+## Get status
+kubectl get node # Find node name
+gcloud compute ssh gke-ukb-io-default-pool-XXXXX
+
+## Remove the cluster
+gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
+
+## Remove node from cluster
+kubectl get nodes
+# Find node to delete: gke-ukb-io-1-default-pool-276513bc-48k5
+kubectl drain gke-ukb-io-1-default-pool-276513bc-48k5 --force --ignore-daemonsets
+gcloud container clusters describe ukb-io-1 --zone us-east1-c 
+# Find instance group name: gke-ukb-io-1-default-pool-276513bc-grp
+gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone us-east1-c 
+```
+
+
+## Execution
+
+
+```bash
+conda activate snakemake
+source env.sh
 
 # Login necessary for GS Read/Write
 gcloud auth application-default login
 
-# Dryrun for workflow
-snakemake --kubernetes --use-conda --local-cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    -np rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
-    
-# Set local cores to 1 so that only one rule runs at a time on cluster hosts
+## Zarr generation
+
+# Generate single zarr archive from bgen
+# * Set local cores to 1 so that only one rule runs at a time on cluster hosts
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
@@ -69,18 +97,15 @@ snakemake --kubernetes --use-conda --local-cores=1 \
 
 # Resize cluster and run on more files:
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
-
 snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chr{21,22}.ckpt
-# Worker running times:
-# 1: 12h 12m
-# 2: 14h 50m
+# Expecting running time w/ 8 vCPUs/32GiB RAM/200G disk per node: 12 - 14 hours
 
-
-gcloud container clusters resize $GKE_CLUSTER_IO --node-pool default-pool --num-nodes 1 --zone $GCP_ZONE
+## Main UKB dataset integration
 
 # Convert main dataset to parquet
+# Takes ~45 mins on 4 cores, 12g heap
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/main/ukb.ckpt
@@ -99,34 +124,6 @@ snakemake --use-conda --cores=1 \
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe-data/external/ukb_meta/data_dictionary_showcase.csv
-    
-    
-# Import OTG V2D
-snakemake --use-conda --cores=1 -np \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe-data/external/otg/20.02.01/v2d.json.ckpt \
-    rs-ukb/pipe-data/external/otg/20.02.01/v2d.parquet.ckpt
-    
-# Download EFO mapping for OTG
-snakemake --use-conda --cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe-data/external/ukb_meta/efo_mapping.csv
-    
-# Check on the cluster
-kubectl get node # Find node name
-gcloud compute ssh gke-ukb-io-default-pool-XXXXX
-
-# Remove the cluster
-gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
-
-# Remove node from running cluster
-# https://pminkov.github.io/blog/removing-a-node-from-a-kubernetes-cluster-on-gke-google-container-engine.html
-kubectl get nodes
-# Find node to delete: gke-ukb-io-1-default-pool-276513bc-48k5
-kubectl drain gke-ukb-io-1-default-pool-276513bc-48k5 --force --ignore-daemonsets
-gcloud container clusters describe ukb-io-1 --zone us-east1-c 
-# Find instance group name: gke-ukb-io-1-default-pool-276513bc-grp
-gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone us-east1-c 
 
 ```
 
@@ -258,16 +255,17 @@ with ProgressBar():
 
 ## Debug
 
-Local (out of GCP):
-
 ```bash
+# Generate DAG
 gcloud auth application-default login
-
-snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb -np \
-    rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
-
-snakemake --default-remote-provider=GS --default-remote-prefix=rs-ukb --dag \
-    rs-ukb/prep-data/gt-imputation/ukb_chrXY.zarr
-
 snakemake --dag data/prep-data/gt-imputation/ukb_chrXY.zarr | dot -Tsvg > dag.svg
+```
+
+## Development Setup
+
+For local development on this pipeline, run:
+
+```
+pip install -r requirements-dev.txt
+pre-commit install
 ```
