@@ -1,6 +1,6 @@
 # NealeLab 2018 UK Biobank GWAS Reproduction Pipeline
 
-This pipeline is a WIP, but it will eventually attempt to reproduce this[GWAS](http://www.nealelab.is/uk-biobank) (with associated code at [UK_Biobank_GWAS](https://github.com/Nealelab/UK_Biobank_GWAS)) using [sgkit](https://github.com/pystatgen/sgkit).
+This pipeline is a WIP, but it will attempt to reproduce this [GWAS](http://www.nealelab.is/uk-biobank) (with associated code at [UK_Biobank_GWAS](https://github.com/Nealelab/UK_Biobank_GWAS)) using [sgkit](https://github.com/pystatgen/sgkit).
 
 ## Local Setup
 
