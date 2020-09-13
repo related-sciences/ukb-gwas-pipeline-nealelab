@@ -14,7 +14,7 @@ conda activate snakemake
 Create a GKE cluster:
 
 ```bash
-source env.sh
+source env.sh; source .env
 
 gcloud init
 
@@ -54,7 +54,7 @@ gcloud projects add-iam-policy-binding $GCP_PROJECT \
 Modify an existing cluster:
 
 ```bash
-source env.sh
+source env.sh; source .env
 
 ## Resize
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
@@ -81,7 +81,7 @@ gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-poo
 
 ```bash
 conda activate snakemake
-source env.sh
+source env.sh; source .env
 
 # Login necessary for GS Read/Write
 gcloud auth application-default login
@@ -136,7 +136,7 @@ Create Dask cluster, see:
 - https://zero-to-jupyterhub.readthedocs.io/en/latest/google/step-zero-gcp.html
 
 ```
-source env.sh
+source env.sh; source .env
 gcloud container clusters create \
   --machine-type n1-highmem-4 \
   --num-nodes 1 \
