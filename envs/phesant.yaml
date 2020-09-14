@@ -1,0 +1,6 @@
+channels:
+ - r
+dependencies:
+ - r=3.4.1
+ - r-optparse=1.4.4
+ - r-data.table=1.10.4_3
