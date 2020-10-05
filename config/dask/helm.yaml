@@ -7,11 +7,11 @@ worker:
   # so this effectively controls how many workers are created and
   # how much memory they have
     limits:
-      cpu: 1
-      memory: 8G
+      cpu: 3
+      memory: 12G
     requests:
-      cpu: 1
-      memory: 8G
+      cpu: 3
+      memory: 12G
   env:
     - name: EXTRA_CONDA_PACKAGES
       value: numba xarray gcsfs dask-ml numba zarr -c conda-forge
