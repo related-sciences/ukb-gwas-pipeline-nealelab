@@ -3,7 +3,7 @@
 rule main_csv_phesant_field_prep:
     input: f"raw-data/main/ukb{ukb_app_id}.csv"
     output: "prep-data/main/ukb_phesant_prep.csv"
-    conda: "envs/phesant.yaml"
+    conda: "../envs/phesant.yaml"
     shell:
         "Rscript scripts/external/phesant_phenotype_prep.R {input} {output}"
 
@@ -23,18 +23,11 @@ rule main_csv_phesant_variable_list:
     input: rules.clone_phesant.output
     # Follow Duncan Palmer's suggestion on the appropriate variable metadata file
     output: "rs-ukb/repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv"
-    conda: "envs/spark.yaml"
-    run:
-        import pandas as pd
-        df = pd.read_csv(input, sep='\t', dtype=str)
-        # Mark variables as excluded unless their description contains any of these substrings
-        terms = ['diabetes', 'sleep', 'depression', 'cardiac', 'addiction', 'height', 'weight']
-        mask = pd.concat([
-            df['Field'].fillna('').str.lower().str.contains(term)
-            for term in terms
-        ], axis=1).any(axis=1)
-        df['EXCLUDED'] = df['EXCLUDED'].where(df['EXCLUDED'].notnull() | mask, 'YES-NOT_IN_SUBSET')
-        df.to_csv(output, sep='\t', index=False, na_rep='')
+    conda: "../envs/spark.yaml"
+    shell:
+        "python ../scripts/create_phesant_variable_list.py run "
+        "--input-path={input} "
+        "--output-path={output} "
 
 # Run PHESANT phenotype normalization
 rule main_csv_phesant_phenotypes:
@@ -44,9 +37,7 @@ rule main_csv_phesant_phenotypes:
         variables_file=rules.main_csv_phesant_variable_list.output,
         coding_file="../variable-info/data-coding-ordinal-info-nov2019-update.txt"
     output: "prep-data/main/ukb_phesant_phenotypes-subset01.csv"
-    conda: "envs/phesant.yaml"
-    params:
-        output_dir=""
+    conda: "../envs/phesant.yaml"
     shell:
         "cd repos/PHESANT/WAS && "
         "rm -rf /tmp/phesant && "

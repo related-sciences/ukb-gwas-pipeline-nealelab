@@ -3,12 +3,12 @@ rule main_csv_to_parquet:
     # Takes ~45 mins on 4 cores, 12g heap
     input: f"raw-data/main/ukb{ukb_app_id}.csv"
     output: "prep-data/main/ukb.ckpt"
-    conda: "envs/spark.yaml"
+    conda: "../envs/spark.yaml"
     params:
         parquet_path=bucket_path("prep-data/main/ukb.parquet")
     shell:
         "export SPARK_DRIVER_MEMORY=12g && "
-        "python scripts/convert_main_data.py csv_to_parquet "
+        "python ../scripts/convert_main_data.py csv_to_parquet "
         "--input-path={input} "
         "--output-path={params.parquet_path} && "
         "gsutil -m -q rsync -d -r {params.parquet_path} gs://{params.parquet_path} && "
@@ -22,23 +22,23 @@ rule download_data_dictionary:
 rule extract_sample_qc_csv:
     input: rules.main_csv_to_parquet.output
     output: "prep-data/main/ukb_sample_qc.csv"
-    conda: "envs/spark.yaml"
+    conda: "../envs/spark.yaml"
     params: 
         input_path=bucket_path("prep-data/main/ukb.parquet")
     shell:
         "export SPARK_DRIVER_MEMORY=10g && "
-        "python scripts/extract_main_data.py sample_qc_csv "
+        "python ../scripts/extract_main_data.py sample_qc_csv "
         "--input-path={params.input_path} "
         "--output-path={output} "
         
 rule extract_sample_qc_zarr:
     input: rules.extract_sample_qc_csv.output
     output: "prep-data/main/ukb_sample_qc.ckpt"
-    conda: "envs/gwas.yaml"
+    conda: "../envs/gwas.yaml"
     params:
         output_path=bucket_path("prep-data/main/ukb_sample_qc.zarr")
     shell:
-        "python scripts/extract_main_data.py sample_qc_zarr "
+        "python ../scripts/extract_main_data.py sample_qc_zarr "
         "--input-path={input} "
         "--output-path={params.output_path} "
         "--remote=True && "

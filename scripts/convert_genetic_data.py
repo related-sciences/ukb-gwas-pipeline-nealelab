@@ -1,6 +1,5 @@
 """UKB PLINK/BGEN to Zarr conversion functions"""
 import logging
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple, Union
@@ -13,13 +12,8 @@ import pandas as pd
 import xarray as xr
 import zarr
 from dask.diagnostics import ProgressBar
+from sgkit.io.plink import read_plink
 from sgkit_bgen import read_bgen
-from sgkit_bgen.bgen_reader import (
-    rechunk_from_zarr,
-    rechunk_to_zarr,
-    to_fixlen_str_array,
-)
-from sgkit_plink import read_plink
 from xarray import Dataset
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
@@ -108,7 +102,7 @@ def load_bgen_variants(path: str):
     ds = ds.drop_vars(["allele1_ref", "allele2_alt"])
     for c in cols + [("allele", str)]:
         if c[0] in ds and c[1] == str:
-            ds[c[0]] = to_fixlen_str_array(ds[c[0]])
+            ds[c[0]] = ds[c[0]].compute().astype("S")
     ds = ds.rename({v: "variant_" + v for v in ds})
     return ds
 
@@ -159,7 +153,8 @@ def load_bgen(
     paths: BGENPaths,
     contig: Contig,
     region: Optional[Tuple[int, int]] = None,
-    chunks: Tuple[int, int] = (652, -1),
+    chunks: Tuple[int, int] = (500, -1),
+    variant_info_threshold: Optional[float] = 0.8,
 ):
     logger.info(
         f"Loading BGEN dataset for contig {contig} from "
@@ -175,6 +170,14 @@ def load_bgen(
     if region is not None:
         ds = ds.isel(variants=slice(region[0], region[1]))
 
+    # Apply variant info threshold if provided (this is applied
+    # early because it is not particularly controversial and
+    # eliminates ~80% of variants when near .8)
+    if variant_info_threshold is not None:
+        ds = ds.isel(variants=ds.variant_info > variant_info_threshold)
+        # Make sure to rechunk after non-uniform filter
+        ds = ds.chunk(chunks=dict(variants=chunks[0]))
+
     return ds
 
 
@@ -183,37 +186,37 @@ def rechunk_bgen(
     output: str,
     contig: Contig,
     # Chosen with expected shape across all chroms:
-    # normalize_chunks('512MB', shape=(97059328, 487409), dtype='float32')
-    chunks: Tuple[int, int] = (10432, 11313),
+    # normalize_chunks('64MB', shape=(int(97059328*.2), 487409), dtype='float32')
+    chunks: Tuple[int, int] = (2035, 4000),
     progress_update_seconds: int = 60,
-    mask_and_scale: bool = False,
     clevel: int = 7,
+    max_mem: str = "16GB",
+    remote: bool = True,
 ) -> Dataset:
     logger.info(
         f"Rechunking BGEN dataset for contig {contig} "
         f"to {output} (chunks = {chunks})"
     )
 
+    if remote:
+        gcs = gcsfs.GCSFileSystem()
+        output = gcsfs.GCSMap(output, gcs=gcs, check=False, create=True)
+
     # Save to local zarr store with desired sample chunking
     with dask.config.set(scheduler="threads"), ProgressBar(dt=progress_update_seconds):
-        rechunk_to_zarr(
-            ds=ds,
-            store=output,
+        res = rechunk_bgen(
+            ds,
+            output=output,
             chunk_length=chunks[0],
             chunk_width=chunks[1],
-            compressor=zarr.Blosc(cname="zstd", clevel=clevel, shuffle=2),
-            compute=True,
+            compressor=zarr.Blosc(cname="zstd", clevel=7, shuffle=2, blocksize=0),
+            probability_dtype="uint8",
+            max_mem=max_mem,
+            pack=True,
         )
 
-    # Load local dataset and rechunk with desired variant chunking
-    ds = rechunk_from_zarr(
-        output,
-        chunk_length=chunks[0],
-        chunk_width=chunks[1],
-        # Set to false to skip decoding floats
-        mask_and_scale=False,
-    )
-    return ds
+    logger.info(f"Rechunked dataset:\n{res}")
+    return res
 
 
 def save_dataset(
@@ -227,7 +230,7 @@ def save_dataset(
     store = output_path
     if remote:
         gcs = gcsfs.GCSFileSystem()
-        store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=True)
+        store = gcsfs.GCSMap(output_path, gcs=gcs, check=False, create=False)
     logger.info(
         f"Dataset to save for contig {contig}:\n{ds}\n"
         f"Writing dataset for contig {contig} to {output_path} "
@@ -265,6 +268,7 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
+    max_mem: str,
     remote: bool = True,
 ):
     """Convert UKB BGEN to Zarr"""
@@ -275,11 +279,8 @@ def bgen_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     assert output_path.endswith(".zarr")
-    temp_path = ".".join(output_path.split(".")[:-1]) + "_temp.zarr"
     ds = load_bgen(paths, contig)
-    ds = rechunk_bgen(ds, temp_path, contig)
-    save_dataset(output_path, ds, contig, scheduler="threads", remote=remote)
-    shutil.rmtree(temp_path)
+    ds = rechunk_bgen(ds, output_path, contig, max_mem=max_mem, remote=remote)
     logger.info("Done")
 
 

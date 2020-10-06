@@ -15,7 +15,7 @@ dependencies:
     - gxx_linux-64 # Install for pysnptools
     - pip
     - pip:
-        - pysnptools==0.4.20
-        - "--editable=git+https://github.com/pystatgen/sgkit.git@320ebc9aaf02a6d396c79aa11ec9d03c0db40615#egg=sgkit"
-        - "--editable=git+https://github.com/pystatgen/sgkit-plink.git@d8dce229b7a8ed51641f11ec412c8bdb3367902a#egg=sgkit-plink"
-        - "--editable=git+https://github.com/eric-czech/sgkit-bgen.git@f2b33933b2a2a694b742360c81ce3e8e19fb1c0a#egg=sgkit-bgen"
+        - bed_reader==0.1.1
+        - git+https://github.com/pangeo-data/rechunker.git@8917e205146c43d0b201609fdf7347e724c1dcd4#egg=rechunker
+        - git+https://github.com/pystatgen/sgkit.git@037f068fc400a4aa4c124503df6f06dc918f03f4#egg=sgkit
+        - git+https://github.com/pystatgen/sgkit-bgen.git@8a87e828e9f60b9bc66dda0ac7baeabf36f9e1dd#egg=sgkit-bgen
