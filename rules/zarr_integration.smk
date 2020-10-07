@@ -36,7 +36,7 @@ rule plink_to_zarr:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-calls/ukb_chr{wc.plink_contig}.zarr"),
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
     shell:
-        "python ../scripts/convert_genetic_data.py plink_to_zarr "
+        "python scripts/convert_genetic_data.py plink_to_zarr "
         "--input-path-bed={input.bed_path} "
         "--input-path-bim={input.bim_path} "
         "--input-path-fam={input.fam_path} "
@@ -51,8 +51,11 @@ def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
     return [f"raw-data/gt-imputation/ukb59384_imp_chr{wc.bgen_contig}_v3_s{n_samples}.sample"]
 
-def get_mem_mb(wc, frac=1.):
-    return int(frac * (config['env']['gke_io_ncpu'] - 1) * 4000)
+def get_thread_ct(key):
+    return config['env'][key] - 1
+    
+def get_mem_mb(n_cpu, frac=1., mem_per_cpu_mb=4000):
+    return int(frac * n_cpu * mem_per_cpu_mb)
 
 rule bgen_to_zarr:
     input:
@@ -61,22 +64,20 @@ rule bgen_to_zarr:
         samples_path=bgen_samples_path
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
-    threads: config['env']['gke_io_ncpu'] - 1
+    threads: get_thread_ct('gke_io_ncpu')
     conda: "../envs/io.yaml"
     resources:
-        mem_mb=get_mem_mb
+        mem_mb=get_mem_mb(get_thread_ct('gke_io_ncpu'))
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
-        contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index'],
-        max_mem=lambda wc: get_mem_mb(wc, frac=.75)
+        contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     shell:
-        "python ../scripts/convert_genetic_data.py bgen_to_zarr "
+        "python scripts/convert_genetic_data.py bgen_to_zarr "
         "--input-path-bgen={input.bgen_path} "
         "--input-path-variants={input.variants_path} "
         "--input-path-samples={input.samples_path} "
         "--output-path={params.zarr_path} "
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
-        "--max-mem={params.max_mem}MB "
         "--remote=True "
         "&& touch {output}"

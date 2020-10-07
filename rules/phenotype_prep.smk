@@ -25,7 +25,7 @@ rule main_csv_phesant_variable_list:
     output: "rs-ukb/repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv"
     conda: "../envs/spark.yaml"
     shell:
-        "python ../scripts/create_phesant_variable_list.py run "
+        "python scripts/create_phesant_variable_list.py run "
         "--input-path={input} "
         "--output-path={output} "
 

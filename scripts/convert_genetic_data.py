@@ -2,7 +2,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import dask
 import fire
@@ -14,6 +14,7 @@ import zarr
 from dask.diagnostics import ProgressBar
 from sgkit.io.plink import read_plink
 from sgkit_bgen import read_bgen
+from sgkit_bgen import rechunk_bgen as sgkit_rechunk_bgen
 from xarray import Dataset
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
@@ -153,8 +154,8 @@ def load_bgen(
     paths: BGENPaths,
     contig: Contig,
     region: Optional[Tuple[int, int]] = None,
-    chunks: Tuple[int, int] = (500, -1),
-    variant_info_threshold: Optional[float] = 0.8,
+    variant_info_threshold: Optional[float] = None,
+    chunks: Tuple[int, int] = (250, -1),
 ):
     logger.info(
         f"Loading BGEN dataset for contig {contig} from "
@@ -168,34 +169,42 @@ def load_bgen(
 
     # Apply variant slice if provided
     if region is not None:
+        logger.info(f"Applying filter to region {region}")
+        n_variant = ds.dims["variants"]
         ds = ds.isel(variants=slice(region[0], region[1]))
+        logger.info(f"Filtered to {ds.dims['variants']} variants of {n_variant}")
 
     # Apply variant info threshold if provided (this is applied
     # early because it is not particularly controversial and
     # eliminates ~80% of variants when near .8)
     if variant_info_threshold is not None:
+        logger.info(f"Applying filter to variant info > {variant_info_threshold}")
+        n_variant = ds.dims["variants"]
         ds = ds.isel(variants=ds.variant_info > variant_info_threshold)
+        logger.info(f"Filtered to {ds.dims['variants']} variants of {n_variant}")
         # Make sure to rechunk after non-uniform filter
-        ds = ds.chunk(chunks=dict(variants=chunks[0]))
+        for v in ds:
+            if "variants" in ds[v].dims and "samples" in ds[v].dims:
+                ds[v] = ds[v].chunk(chunks=dict(variants=chunks[0]))
+            elif "variants" in ds[v].dims:
+                ds[v] = ds[v].chunk(chunks=dict(variants="auto"))
 
     return ds
 
 
-def rechunk_bgen(
+def rechunk_dataset(
     ds: Dataset,
     output: str,
     contig: Contig,
-    # Chosen with expected shape across all chroms:
-    # normalize_chunks('64MB', shape=(int(97059328*.2), 487409), dtype='float32')
-    chunks: Tuple[int, int] = (2035, 4000),
+    fn: Callable,
+    chunks: Tuple[int, int],
     progress_update_seconds: int = 60,
-    clevel: int = 7,
-    max_mem: str = "16GB",
+    max_mem: str = "2GB",
     remote: bool = True,
+    **kwargs,
 ) -> Dataset:
     logger.info(
-        f"Rechunking BGEN dataset for contig {contig} "
-        f"to {output} (chunks = {chunks})"
+        f"Rechunking dataset for contig {contig} " f"to {output} (chunks = {chunks})"
     )
 
     if remote:
@@ -203,16 +212,14 @@ def rechunk_bgen(
         output = gcsfs.GCSMap(output, gcs=gcs, check=False, create=True)
 
     # Save to local zarr store with desired sample chunking
-    with dask.config.set(scheduler="threads"), ProgressBar(dt=progress_update_seconds):
-        res = rechunk_bgen(
+    with ProgressBar(dt=progress_update_seconds):
+        res = fn(
             ds,
             output=output,
             chunk_length=chunks[0],
             chunk_width=chunks[1],
-            compressor=zarr.Blosc(cname="zstd", clevel=7, shuffle=2, blocksize=0),
-            probability_dtype="uint8",
             max_mem=max_mem,
-            pack=True,
+            **kwargs,
         )
 
     logger.info(f"Rechunked dataset:\n{res}")
@@ -257,6 +264,7 @@ def plink_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_plink(paths, contig)
+    # TODO: Switch to rechunk method
     save_dataset(output_path, ds, contig, scheduler="processes", remote=remote)
     logger.info("Done")
 
@@ -268,7 +276,7 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    max_mem: str,
+    max_mem: str = "2GB",
     remote: bool = True,
 ):
     """Convert UKB BGEN to Zarr"""
@@ -278,9 +286,23 @@ def bgen_to_zarr(
         samples_path=input_path_samples,
     )
     contig = Contig(name=contig_name, index=contig_index)
-    assert output_path.endswith(".zarr")
     ds = load_bgen(paths, contig)
-    ds = rechunk_bgen(ds, output_path, contig, max_mem=max_mem, remote=remote)
+
+    # Chosen with expected shape across all chroms (~128MB chunks):
+    # normalize_chunks('auto', shape=(97059328, 487409), dtype='float32')
+    chunks = (5216, 5792)
+    ds = rechunk_dataset(
+        ds,
+        output=output_path,
+        contig=contig,
+        fn=sgkit_rechunk_bgen,
+        chunks=chunks,
+        max_mem=max_mem,
+        remote=remote,
+        compressor=zarr.Blosc(cname="zstd", clevel=7, shuffle=2, blocksize=0),
+        probability_dtype="uint8",
+        pack=True,
+    )
     logger.info("Done")
 
 
