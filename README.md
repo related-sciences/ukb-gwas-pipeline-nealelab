@@ -173,7 +173,7 @@ gcloud container clusters create \
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
-# Expecting running time on 8vCPU/24G: ~40 minutes
+# Expecting running time: ~40 minutes
 
 # Resize cluster and run on more files:
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE

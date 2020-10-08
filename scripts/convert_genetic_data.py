@@ -12,9 +12,8 @@ import pandas as pd
 import xarray as xr
 import zarr
 from dask.diagnostics import ProgressBar
+from sgkit.io.bgen import read_bgen, rechunk_bgen
 from sgkit.io.plink import read_plink
-from sgkit_bgen import read_bgen
-from sgkit_bgen import rechunk_bgen as sgkit_rechunk_bgen
 from xarray import Dataset
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
@@ -133,7 +132,7 @@ def load_bgen_samples(path: str) -> Dataset:
 def load_bgen_probabilities(
     path: str, contig: Contig, chunks: Optional[Union[str, int, tuple]] = None
 ) -> Dataset:
-    ds = read_bgen(path, chunks=chunks, dtype="float16")
+    ds = read_bgen(path, chunks=chunks, gp_dtype="float16")
 
     # Update contig index/names
     ds = transform_contig(ds, contig)
@@ -198,8 +197,8 @@ def rechunk_dataset(
     contig: Contig,
     fn: Callable,
     chunks: Tuple[int, int],
+    max_mem: str,
     progress_update_seconds: int = 60,
-    max_mem: str = "2GB",
     remote: bool = True,
     **kwargs,
 ) -> Dataset:
@@ -276,7 +275,7 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    max_mem: str = "2GB",
+    max_mem: str = "1GB",  # per-worker
     remote: bool = True,
 ):
     """Convert UKB BGEN to Zarr"""
@@ -295,7 +294,7 @@ def bgen_to_zarr(
         ds,
         output=output_path,
         contig=contig,
-        fn=sgkit_rechunk_bgen,
+        fn=rechunk_bgen,
         chunks=chunks,
         max_mem=max_mem,
         remote=remote,
