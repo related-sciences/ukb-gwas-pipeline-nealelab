@@ -3,6 +3,7 @@ channels:
     - conda-forge
 dependencies:
     # TODO: pin
+    - python=3.8
     - numpy
     - xarray
     - dask
@@ -18,4 +19,4 @@ dependencies:
         - bed-reader==0.1.1
         - cbgen==0.1.6
         - git+https://github.com/pangeo-data/rechunker.git@4b0da52a4f5f6e8b3feb7e89233c3b5217f6fc0a#egg=rechunker
-        - git+https://github.com/eric-czech/sgkit.git@ccb2fb773e9e94b2d94fc57dce14bbdc29fea0a1#egg=sgkit
+        - git+https://github.com/eric-czech/sgkit.git@14210b2c3ec3387aa61e64ec244f50e7f3e890de#egg=sgkit

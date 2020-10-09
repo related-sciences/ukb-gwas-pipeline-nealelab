@@ -27,11 +27,11 @@ rule plink_to_zarr:
         bed_path="raw-data/gt-calls/ukb_cal_chr{plink_contig}_v2.bed",
         bim_path="raw-data/gt-calls/ukb_snp_chr{plink_contig}_v2.bim",
         fam_path="raw-data/gt-calls/ukb59384_cal_chr{plink_contig}_v2_s488264.fam"
-    output:
+    output: 
         "prep-data/gt-calls/ukb_chr{plink_contig}.ckpt"
-    threads: config['env']['gke_io_ncpu'] - 1
-    conda:
-        "../envs/io.yaml"
+    threads: gke_io_ncpu - 1
+    resources: mem_mb=gke_io_mem_mb - 1000
+    conda: "../envs/io.yaml"
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-calls/ukb_chr{wc.plink_contig}.zarr"),
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
@@ -51,12 +51,6 @@ def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
     return [f"raw-data/gt-imputation/ukb59384_imp_chr{wc.bgen_contig}_v3_s{n_samples}.sample"]
 
-def get_thread_ct(key):
-    return config['env'][key] - 1
-    
-def get_mem_mb(n_cpu, frac=1., mem_per_cpu_mb=4000):
-    return int(frac * n_cpu * mem_per_cpu_mb)
-
 rule bgen_to_zarr:
     input:
         bgen_path="raw-data/gt-imputation/ukb_imp_chr{bgen_contig}_v3.bgen",
@@ -64,10 +58,9 @@ rule bgen_to_zarr:
         samples_path=bgen_samples_path
     output:
         "prep-data/gt-imputation/ukb_chr{bgen_contig}.ckpt"
-    threads: get_thread_ct('gke_io_ncpu')
+    threads: gke_io_ncpu - 1
+    resources: mem_mb=gke_io_mem_mb - 1000
     conda: "../envs/io.yaml"
-    resources:
-        mem_mb=get_mem_mb(get_thread_ct('gke_io_ncpu'))
     params:
         zarr_path=lambda wc: bucket_path(f"prep-data/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']

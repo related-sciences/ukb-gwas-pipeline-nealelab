@@ -6,9 +6,18 @@ GS = GSRemoteProvider()
 
 configfile: "config.yaml"
 
-bucket = os.getenv('GCS_BUCKET', config['env']['gcs_bucket'])
-ukb_app_id = os.getenv('UKB_APP_ID', config['env']['ukb_app_id'])
-gcp_project = os.getenv('GCP_PROJECT', config['env']['gcp_project'])
+envvars:
+    "UKB_APP_ID",
+    "GCS_BUCKET",
+    "GCP_PROJECT",
+    "GKE_IO_NCPU",
+    "GKE_IO_MEM_MB"
+
+bucket = os.environ['GCS_BUCKET']
+ukb_app_id = os.environ['UKB_APP_ID']
+gcp_project = os.environ['GCP_PROJECT']
+gke_io_ncpu = int(os.environ['GKE_IO_NCPU'])
+gke_io_mem_mb = int(os.environ['GKE_IO_MEM_MB'])
 
 def bucket_path(path):
     return bucket + '/' + path

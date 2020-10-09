@@ -158,9 +158,9 @@ snakemake --use-conda --cores=1 \
 
 # Create cluster with 8 vCPUs/32GiB RAM/200G disk per node
 gcloud container clusters create \
-  --machine-type custom-${GKE_IO_NCPU}-32768 \
+  --machine-type custom-${GKE_IO_NCPU}-${GKE_IO_MEM_MB} \
   --disk-type pd-standard \
-  --disk-size 200G \
+  --disk-size ${GKE_IO_DISK_GB}G \
   --num-nodes 2 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
