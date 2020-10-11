@@ -93,6 +93,33 @@ gcloud container clusters describe ukb-io-1 --zone us-east1-c
 gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone us-east1-c 
 ```
 
+### Autoscaling
+
+TODO: Describe how to set this up w/ snakemake (is it possible in a non-default node pool?)
+
+```bash
+gcloud container clusters create \
+  --machine-type=g1-small \
+  --num-nodes 1 \
+  --zone $GCP_ZONE \
+  --node-locations $GCP_ZONE \
+  --cluster-version latest \
+  $GKE_IO_NAME
+  
+gcloud container node-pools create io-worker-pool \
+    --cluster=$GKE_IO_NAME \
+    --machine-type custom-${GKE_IO_NCPU}-${GKE_IO_MEM_MB} \
+    --disk-type pd-standard \
+    --disk-size ${GKE_IO_DISK_GB}G \
+    --node-taints=reserved-pool=true:NoSchedule  \
+    --enable-autoscaling \
+    --num-nodes=0 \
+    --min-nodes=0 \
+    --max-nodes=2 \
+    --zone=$GCP_ZONE \
+    --node-locations $GCP_ZONE \
+    --scopes storage-rw 
+```
 
 ## Execution
 
@@ -149,6 +176,17 @@ snakemake --use-conda --cores=1 \
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/main/ukb_phesant_phenotypes-subset01.csv
+
+# Dump the resulting field ids into a separate csv for debugging
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb_phesant_phenotypes-subset01.field_ids.csv -n
+    
+# Copy Neale Lab sumstats from Open Targets
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
+    
 ```
 
 ### Zarr Integration
@@ -156,7 +194,7 @@ snakemake --use-conda --cores=1 \
 
 ```bash
 
-# Create cluster with 8 vCPUs/32GiB RAM/200G disk per node
+# Create cluster with enough disk to hold two copies of each bgen file
 gcloud container clusters create \
   --machine-type custom-${GKE_IO_NCPU}-${GKE_IO_MEM_MB} \
   --disk-type pd-standard \
@@ -173,16 +211,17 @@ gcloud container clusters create \
 snakemake --kubernetes --use-conda --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chrXY.ckpt
-# Expecting running time: ~40 minutes
+# Expecting running time (8 vCPUs): ~30 minutes
 
 # Resize cluster and run on more files:
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
 snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep-data/gt-imputation/ukb_chr{21,22}.ckpt
-# Expecting running time w/ 8 vCPUs/32GiB RAM/200G disk per node: 12 - 14 hours
+# Expecting running time (8 vCPUs): 12 - 14 hours
 
-# Delete the GKE cluster
+# Delete the cluster
+gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 ```
 
 

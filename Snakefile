@@ -1,5 +1,6 @@
 from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
 from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+import pandas as pd
 
 HTTP = HTTPRemoteProvider()
 GS = GSRemoteProvider()
@@ -22,9 +23,33 @@ gke_io_mem_mb = int(os.environ['GKE_IO_MEM_MB'])
 def bucket_path(path):
     return bucket + '/' + path
 
+def to_df(contigs):
+    return pd.DataFrame(contigs).astype(str).set_index('name', drop=False)
+
+plink_contigs = to_df(config['raw']['plink']['contigs'])
+bgen_contigs = to_df(config['raw']['bgen']['contigs'])
+
+rule all:
+    input:
+        expand(
+            "prep/gt-calls/ukb_chr{plink_contig}.ckpt", 
+            plink_contig=plink_contigs['name']
+        ),
+        expand(
+            "prep/gt-imputation/ukb_chr{bgen_contig}.ckpt", 
+            bgen_contig=bgen_contigs['name']
+        ),
+        "prep/main/ukb.ckpt",
+        "pipe/external/ukb_meta/data_dictionary_showcase.csv",
+        "prep/main/ukb_sample_qc.csv",
+        "prep/main/ukb_sample_qc.ckpt"
+
+
 include: "rules/zarr_integration.smk"
 include: "rules/primary_integration.smk"
-include: "rules/phenotype_prep.smk"
+include: "rules/sumstat_integration.smk"
+include: "rules/phenotype_integration.smk"
+include: "rules/gwas_pipeline.smk"
         
 onsuccess:
     print("Workflow finished successfully")

@@ -104,6 +104,7 @@ def load_bgen_variants(path: str):
         if c[0] in ds and c[1] == str:
             ds[c[0]] = ds[c[0]].compute().astype("S")
     ds = ds.rename({v: "variant_" + v for v in ds})
+    ds = ds.chunk(chunks="auto")
     return ds
 
 
@@ -203,12 +204,13 @@ def rechunk_dataset(
     **kwargs,
 ) -> Dataset:
     logger.info(
-        f"Rechunking dataset for contig {contig} " f"to {output} (chunks = {chunks})"
+        f"Rechunking dataset for contig {contig} "
+        f"to {output} (chunks = {chunks}):\n{ds}"
     )
 
     if remote:
         gcs = gcsfs.GCSFileSystem()
-        output = gcsfs.GCSMap(output, gcs=gcs, check=False, create=True)
+        output = gcsfs.GCSMap(output, gcs=gcs, check=False, create=False)
 
     # Save to local zarr store with desired sample chunking
     with ProgressBar(dt=progress_update_seconds):
@@ -277,6 +279,7 @@ def bgen_to_zarr(
     contig_index: int,
     max_mem: str = "1GB",  # per-worker
     remote: bool = True,
+    region: Optional[Tuple[int, int]] = None,
 ):
     """Convert UKB BGEN to Zarr"""
     paths = BGENPaths(
@@ -285,7 +288,7 @@ def bgen_to_zarr(
         samples_path=input_path_samples,
     )
     contig = Contig(name=contig_name, index=contig_index)
-    ds = load_bgen(paths, contig)
+    ds = load_bgen(paths, contig, region=region)
 
     # Chosen with expected shape across all chroms (~128MB chunks):
     # normalize_chunks('auto', shape=(97059328, 487409), dtype='float32')
