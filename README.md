@@ -189,7 +189,7 @@ snakemake --use-conda --cores=1 \
     
 ```
 
-### Zarr Integration
+## Zarr Integration
 
 
 ```bash
@@ -225,6 +225,38 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 ```
 
 
+## GWAS QC 
+
+
+```
+source env.sh; source .env
+gcloud container clusters create \
+  --machine-type n1-standard-8 \
+  --num-nodes 20 \
+  --zone $GCP_ZONE \
+  --node-locations $GCP_ZONE \
+  --cluster-version latest \
+  --scopes storage-rw \
+  $GKE_DASK_NAME
+  
+helm install ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
+  
+export DASK_SCHEDULER=$(kubectl get svc --namespace default ukb-dask-helm-1-scheduler -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER:8786
+echo $DASK_SCHEDULER_ADDRESS
+
+    
+# Takes ~25 mins per chromosome on 20 n1-standard-8 nodes
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/gt-imputation-qc/ukb_chr{XY,21,22}.ckpt
+    
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chrXY.ckpt
+
+```
+
 ## Analysis
 
 WIP docs on how to run the actual GWAS.
@@ -240,19 +272,13 @@ First create Dask cluster, see:
 ```
 source env.sh; source .env
 gcloud container clusters create \
-  --machine-type n1-highmem-4 \
-  --num-nodes 1 \
+  --machine-type n1-standard-8 \
+  --num-nodes 20 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
   $GKE_DASK_NAME
-  
-kubectl create clusterrolebinding cluster-admin-binding \
-  --clusterrole=cluster-admin \
-  --user=$GCP_USER_EMAIL
-  
-gcloud container clusters get-credentials $GKE_DASK_NAME --zone $GCP_ZONE
 
 # Install Helm (follow https://helm.sh/docs/intro/install/#from-script)
 
@@ -265,6 +291,28 @@ helm repo update
 # helm install dask/dask --generate-name # Get generic name
 helm install ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
 
+kubectl scale deployment/ukb-dask-helm-1-worker --replicas=20
+
+
+# To launch a jupyter client or script not within the cluster:
+conda env create -n gwas-dev -f envs/gwas.yaml
+conda activate gwas-dev
+# Set dask scheduler env var 
+# See: kubectl get services for ips
+export DASK_SCHEDULER=$(kubectl get svc --namespace default ukb-dask-helm-1-scheduler -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER:8786
+echo $DASK_SCHEDULER_ADDRESS
+# Launch jupyter or run a script
+conda install -c conda-forge jupyterlab
+jupyter notebook --ip=0.0.0.0
+
+# To access UI:
+local_host> gcloud beta compute ssh $GCE_WORK_HOST --project $GCP_PROJECT --ssh-flag="-L 8081:localhost:8081" 
+gce_host> kubectl port-forward --namespace default svc/ukb-dask-helm-1-scheduler 8081:80 & 
+# View scheduler at localhost:8081 on local host
+
+### Misc Commands
+
 # Get environment variables and general status message
 helm status ukb-dask-helm-1
 
@@ -276,11 +324,15 @@ helm upgrade ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
 # or other processes need to be restarted (even notebook kernels)
 
 # To manually scale workers:
-gcloud container clusters resize ukb-dask-1 --node-pool default-pool --num-nodes 8 --zone $GCP_ZONE
-kubectl scale deployment/ukb-dask-helm-1-worker --replicas=2
+gcloud container clusters resize $GKE_DASK_NAME --node-pool default-pool --num-nodes 20 --zone $GCP_ZONE
+kubectl scale deployment/ukb-dask-helm-1-worker --replicas=20
 
 # Use this to show current cpu/memory allocation on nodes:
 kubectl describe nodes
+
+# to ssh to running container in cluster
+kubectl get pods (find worker)
+kubectl exec --stdin --tty dask-1596898147-worker-5cfbc5d8-d5rhs -- /bin/bash
 
 # Check for IPs
 kubectl get services
@@ -288,13 +340,13 @@ kubectl get services
 # Show worker deployment 
 kubectl get deployment/ukb-dask-helm-1-worker
 
-# Resize to zero temporarily
-gcloud container clusters resize ukb-dask-1 --node-pool default-pool --num-nodes 0 --zone $GCP_ZONE
+# Resize 
+gcloud container clusters resize $GKE_DASK_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
 
 # Remove the release (still need to delete kube cluster separately)
 helm delete ukb-dask-helm-1
 
-gcloud container clusters delete ukb-dask-1 --zone $GCP_ZONE
+gcloud container clusters delete $GKE_DASK_NAME --zone $GCP_ZONE
 ```
 
 #### Access
@@ -303,7 +355,7 @@ gcloud container clusters delete ukb-dask-1 --zone $GCP_ZONE
 # By default, Helm external ips are no longer configured, see
 # https://stackoverflow.com/questions/62324275/external-ip-not-exposed-helm-dask.
 # For testing, it can be useful to update these with the following:
-# helm upgrade ukb-dask-helm-1 dask/dask --set jupyter.serviceType=LoadBalancer --set jupyter.serviceType=LoadBalancer
+# helm upgrade ukb-dask-helm-1 dask/dask --set scheduler.serviceType=LoadBalancer
 
 #######################
 # Use Cluster Jupyter #

@@ -1,26 +1,43 @@
-# See: https://docs.dask.org/en/latest/setup/kubernetes-helm.html#configure-environment
+# See: 
+# - https://docs.dask.org/en/latest/setup/kubernetes-helm.html#configure-environment
+# - https://github.com/dask/helm-chart/blob/master/dask/values.yaml
+scheduler:
+  image:
+    repository: "daskdev/dask"
+    tag: 2.30.0 
+    pullPolicy: IfNotPresent
+  serviceType: "LoadBalancer"
+  #serviceType: "ClusterIP"
 worker:
-  # Assume n1-highmem-4 (26GB)
+  image:
+    repository: "daskdev/dask"
+    tag: 2.30.0
+    pullPolicy: IfNotPresent
+    dask_worker: "dask-worker"
+  serviceType: "LoadBalancer"
   replicas: 1
   resources:
-  # Dask scheduler only seems to respect limits and not requests,
-  # so this effectively controls how many workers are created and
-  # how much memory they have
+    # Use ~26G for n1-standard-8 and ~48G for n1-highmem-8
     limits:
-      cpu: 3
-      memory: 12G
+      cpu: 7
+      memory: 26G
     requests:
-      cpu: 3
-      memory: 12G
+      cpu: 7
+      memory: 26G
   env:
     - name: EXTRA_CONDA_PACKAGES
-      value: numba xarray gcsfs dask-ml numba zarr -c conda-forge
+      value: numba==0.51.2 xarray==0.16.1 gcsfs==0.7.1 dask-ml==1.7.0 zarr==2.4.0 -c conda-forge
     - name: EXTRA_PIP_PACKAGES
-      value: --editable=git+https://github.com/pystatgen/sgkit.git@b7e6bfc7f28f4e15760044453f55dee588630bec#egg=sgkit
+      value: git+https://github.com/pystatgen/sgkit.git@9d887c5f513f3d9febcb5a9c05d476f59bd6fba1#egg=sgkit
 jupyter:
   enabled: false
+  serviceType: "LoadBalancer"
+  image:
+    repository: "daskdev/dask-notebook"
+    tag: 2.30.0
+    pullPolicy: IfNotPresent
   env:
     - name: EXTRA_CONDA_PACKAGES
-      value: numba xarray gcsfs dask-ml numba zarr -c conda-forge
+      value: numba==0.51.2 xarray==0.16.1 gcsfs==0.7.1 dask-ml==1.7.0 zarr==2.4.0 -c conda-forge
     - name: EXTRA_PIP_PACKAGES
-      value: --editable=git+https://github.com/pystatgen/sgkit.git@b7e6bfc7f28f4e15760044453f55dee588630bec#egg=sgkit
+      value: git+https://github.com/pystatgen/sgkit.git@9d887c5f513f3d9febcb5a9c05d476f59bd6fba1#egg=sgkit

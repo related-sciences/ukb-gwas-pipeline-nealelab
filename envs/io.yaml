@@ -18,5 +18,5 @@ dependencies:
     - pip:
         - bed-reader==0.1.1
         - cbgen==0.1.6
-        - git+https://github.com/pangeo-data/rechunker.git@4b0da52a4f5f6e8b3feb7e89233c3b5217f6fc0a#egg=rechunker
-        - git+https://github.com/eric-czech/sgkit.git@14210b2c3ec3387aa61e64ec244f50e7f3e890de#egg=sgkit
+        - rechunker==0.3.1
+        - git+https://github.com/pystatgen/sgkit.git@9d887c5f513f3d9febcb5a9c05d476f59bd6fba1#egg=sgkit
