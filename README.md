@@ -240,21 +240,24 @@ gcloud container clusters create \
   $GKE_DASK_NAME
   
 helm install ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
+kubectl scale deployment/ukb-dask-helm-1-worker --replicas=20
   
 export DASK_SCHEDULER=$(kubectl get svc --namespace default ukb-dask-helm-1-scheduler -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER:8786
 echo $DASK_SCHEDULER_ADDRESS
 
     
-# Takes ~25 mins per chromosome on 20 n1-standard-8 nodes
+# Takes ~25 mins for 21/22 on 20 n1-standard-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation-qc/ukb_chr{XY,21,22}.ckpt
-    
+
+# Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chrXY.ckpt
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
 
+gcloud container clusters delete $GKE_DASK_NAME --zone $GCP_ZONE
 ```
 
 ## Analysis

@@ -8,6 +8,9 @@ scheduler:
     pullPolicy: IfNotPresent
   serviceType: "LoadBalancer"
   #serviceType: "ClusterIP"
+  env:
+    - name: EXTRA_CONDA_PACKAGES
+      value: jupyter-server-proxy -c conda-forge
 worker:
   image:
     repository: "daskdev/dask"
