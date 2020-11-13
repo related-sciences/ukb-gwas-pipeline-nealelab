@@ -8,6 +8,8 @@ dependencies:
     # - Versions exported from scheduler using `conda env export --from-history`
     - python==3.8.0
     - numpy==1.18.1
+    - distributed==2.30.0
+    - tornado==6.0.4
     - dask==2.30.0
     - xarray==0.16.1
     - tini==0.18.0
@@ -26,4 +28,4 @@ dependencies:
     - pip:
         - cbgen==0.1.6
         - rechunker==0.3.1
-        - git+https://github.com/pystatgen/sgkit.git@9d887c5f513f3d9febcb5a9c05d476f59bd6fba1#egg=sgkit
+        - git+https://github.com/pystatgen/sgkit.git@9c24b3c2e7f8d3d40e25ece032d21c59ce696d3a#egg=sgkit

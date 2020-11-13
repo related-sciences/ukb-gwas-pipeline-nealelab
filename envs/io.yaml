@@ -19,4 +19,4 @@ dependencies:
         - bed-reader==0.1.1
         - cbgen==0.1.6
         - rechunker==0.3.1
-        - git+https://github.com/pystatgen/sgkit.git@9d887c5f513f3d9febcb5a9c05d476f59bd6fba1#egg=sgkit
+        - git+https://github.com/pystatgen/sgkit.git@9c24b3c2e7f8d3d40e25ece032d21c59ce696d3a#egg=sgkit

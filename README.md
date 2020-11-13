@@ -15,6 +15,8 @@ conda env create -f envs/snakemake.yaml
 conda activate snakemake
 ```
 
+Where not stated otherwise, all executable commands are assumed to be run from the root of this repository.
+
 ## Cluster Management
 
 This pipeline involves steps that require very different resource profiles.  Because of this, 
@@ -68,6 +70,52 @@ gcloud auth application-default login
 # Run snakemake commands
 ```
 
+#### Using Cloud Provider
+
+```bash
+conda env create -f envs/cloudprovider.yaml 
+conda activate cloudprovider
+
+source env.sh; source .env
+source config/dask/cloudprovider.sh
+python scripts/cloudprovider.py -- --interactive
+
+>>> create(n_workers=1)
+Launching cluster with the following configuration:
+  Source Image: projects/ubuntu-os-cloud/global/images/ubuntu-minimal-1804-bionic-v20201014
+  Docker Image: daskdev/dask:latest
+  Machine Type: n1-standard-8
+  Filesytsem Size: 50
+  N-GPU Type:
+  Zone: us-east1-c
+Creating scheduler instance
+dask-8a0571b8-scheduler
+	Internal IP: 10.142.0.46
+	External IP: 35.229.60.113
+Waiting for scheduler to run
+
+>>> scale(3)
+Creating worker instance
+Creating worker instance
+dask-9347b93f-worker-60a26daf
+	Internal IP: 10.142.0.52
+	External IP: 35.229.60.113
+dask-9347b93f-worker-4cc3cb6e
+	Internal IP: 10.142.0.53
+	External IP: 35.231.82.163
+
+>>> adapt(0, 5, interval="60s", wait_count=3)
+distributed.deploy.adaptive - INFO - Adaptive scaling started: minimum=0 maximum=5
+
+>>> close()
+Closing Instance: dask-9347b93f-scheduler
+```
+
+To see the Dask UI for this cluster, run this on any workstation (outside of GCP):
+
+```gcloud beta compute ssh --zone "us-east1-c" "dask-9347b93f-scheduler" --ssh-flag="-L 8799:localhost:8787"```.
+
+The UI is then available at `http://localhost:8799`.
 
 ### Modify Cluster
 
@@ -229,22 +277,19 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 
 
 ```
-source env.sh; source .env
-gcloud container clusters create \
-  --machine-type n1-standard-8 \
-  --num-nodes 20 \
-  --zone $GCP_ZONE \
-  --node-locations $GCP_ZONE \
-  --cluster-version latest \
-  --scopes storage-rw \
-  $GKE_DASK_NAME
-  
-helm install ukb-dask-helm-1 dask/dask -f config/dask/helm.yaml
-kubectl scale deployment/ukb-dask-helm-1-worker --replicas=20
-  
-export DASK_SCHEDULER=$(kubectl get svc --namespace default ukb-dask-helm-1-scheduler -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER:8786
+# In a separate terminal/screen:
+conda activate cloudprovider
+source env.sh; source .env; source config/dask/cloudprovider.sh
+python -i scripts/cloudprovider.py create 0 - adapt 0 20 - export_scheduler_info
+
+source env.sh; source .env  
+export DASK_SCHEDULER_IP=`cat /tmp/scheduler-info.txt | grep internal_ip | cut -d'=' -f 2'`
+export DASK_SCHEDULER_HOST=`cat /tmp/scheduler-info.txt | grep hostname | cut -d'=' -f 2'`
+export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER_IP:8786
 echo $DASK_SCHEDULER_ADDRESS
+
+# For the UI, open this tunnel and view locally at localhost:8799: 
+# gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
 
     
 # Takes ~25 mins for 21/22 on 20 n1-standard-8 nodes
@@ -257,7 +302,7 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
 
-gcloud container clusters delete $GKE_DASK_NAME --zone $GCP_ZONE
+
 ```
 
 ## Analysis

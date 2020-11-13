@@ -1,0 +1,11 @@
+name: cloudprovider
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    - python=3.8
+    - dask==2.30.0
+    - fire==0.3.1
+    - pip
+    - pip:
+        - git+https://github.com/dask/dask-cloudprovider.git@35deeb415e061ca90973fd24e56b1b7a6f54bc16#egg=dask-cloudprovider[gcp]
