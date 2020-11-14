@@ -4,6 +4,7 @@ channels:
     - bioconda
 dependencies:
     - python=3.8
+    - ipython=7.19
     - dask==2.30.0
     - fire==0.3.1
     - pip
