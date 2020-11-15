@@ -281,14 +281,14 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cloudprovider.py -- --interactive
-create(0); adapt(0, 20); export_scheduler_info();
+create(0); adapt(0, 20, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
 conda activate snakemake
 source env.sh; source .env  
 export DASK_SCHEDULER_IP=`cat /tmp/scheduler-info.txt | grep internal_ip | cut -d'=' -f 2`
 export DASK_SCHEDULER_HOST=`cat /tmp/scheduler-info.txt | grep hostname | cut -d'=' -f 2`
 export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER_IP:8786
-echo $DASK_SCHEDULER_ADDRESS
+echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
@@ -303,7 +303,7 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
     
-
+# Takes ~4 mins for XY on 20 n1-highmem-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules gwas \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{XY,21,22}.ckpt
