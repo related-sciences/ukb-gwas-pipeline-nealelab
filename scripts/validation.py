@@ -82,6 +82,8 @@ def merge_sumstats(
 ):
     if isinstance(contigs, str):
         contigs = contigs.split(",")
+    contigs = [str(c) for c in contigs]
+
     logger.info(
         f"Merging sumstats (gwas_sumstats_path_fmt={gwas_sumstats_path_fmt}, "
         f"ot_sumstats_path_fmt={ot_sumstats_path_fmt}, contigs={contigs})"
