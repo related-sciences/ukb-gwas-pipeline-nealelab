@@ -20,8 +20,11 @@ gcp_project = os.environ['GCP_PROJECT']
 gke_io_ncpu = int(os.environ['GKE_IO_NCPU'])
 gke_io_mem_mb = int(os.environ['GKE_IO_MEM_MB'])
 
-def bucket_path(path):
-    return bucket + '/' + path
+def bucket_path(path, add_protocol=False):
+    path = bucket + '/' + path
+    if add_protocol:
+        path = 'gs://' + path
+    return path
 
 def to_df(contigs):
     return pd.DataFrame(contigs).astype(str).set_index('name', drop=False)

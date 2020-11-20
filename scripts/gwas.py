@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 import dask
 import dask.array as da
-import dask.dataframe as dd
 import fire
 import fsspec
 import numpy as np
@@ -90,7 +89,7 @@ def variant_genotype_counts(ds: Dataset) -> DataArray:
 
 
 def apply_filters(ds: Dataset, filters: Dict[str, Any], dim: str) -> Dataset:
-    logger.info("Filter summary (True ==> kept):")
+    logger.info("Filter summary (True = kept, False = removed):")
     mask = []
     for k, v in filters.items():
         v = v.compute()
@@ -104,13 +103,13 @@ def apply_filters(ds: Dataset, filters: Dict[str, Any], dim: str) -> Dataset:
     return ds.isel(**{dim: mask})
 
 
-TRAIT_ID_COLS = [
+TRAIT_IDS = [
     "50",  # Height (https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=50)
     "23098",  # Weight (https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=23098)
 ]
 
 
-def load_traits(phenotypes_path: str):
+def load_traits(phenotypes_path: str, dictionary_path: str):
     df = pd.read_csv(phenotypes_path, sep="\t")
     ds = (
         df[["userId"]]
@@ -119,20 +118,34 @@ def load_traits(phenotypes_path: str):
         .to_xarray()
         .drop("samples")
     )
-    ds["trait"] = xr.DataArray(df[TRAIT_ID_COLS].values, dims=("samples", "traits"))
-    # TODO: Decide how to partition phenotypes based on presence, or process them individually
+    trait_id_to_name = (
+        pd.read_csv(
+            dictionary_path,
+            sep=",",
+            usecols=["FieldID", "Field"],
+            dtype={"FieldID": str, "Field": str},
+        )
+        .set_index("FieldID")["Field"]
+        .to_dict()
+    )
+    ds["trait"] = xr.DataArray(df[TRAIT_IDS].values, dims=("samples", "traits"))
+    ds["trait_id"] = xr.DataArray(np.array(TRAIT_IDS, dtype=str), dims="traits")
     ds["trait_imputed"] = ds.trait.pipe(
         lambda x: x.where(x.notnull(), x.mean(dim="samples"))
     )
-    ds["trait_names"] = xr.DataArray(
-        np.array(["height", "weight"], dtype="S"), dims=["traits"]
+    ds["trait_name"] = xr.DataArray(
+        np.array(
+            [trait_id_to_name[trait_id] for trait_id in ds["trait_id"].values],
+            dtype=str,
+        ),
+        dims="traits",
     )
     ds = ds.rename_vars({v: f"sample_{v}" for v in ds})
     return ds
 
 
-def add_traits(ds: Dataset, phenotypes_path: str) -> Dataset:
-    ds_tr = load_traits(phenotypes_path)
+def add_traits(ds: Dataset, phenotypes_path: str, dictionary_path: str) -> Dataset:
+    ds_tr = load_traits(phenotypes_path, dictionary_path)
     ds = ds.assign_coords(samples=lambda ds: ds.sample_id).merge(
         ds_tr.assign_coords(samples=lambda ds: ds.sample_id),
         join="left",
@@ -142,12 +155,12 @@ def add_traits(ds: Dataset, phenotypes_path: str) -> Dataset:
 
 
 def add_covariates(ds: Dataset, npc: int = 10) -> Dataset:
-    covariates = np.column_stack(
-        (
-            ds["sample_genetic_sex"],
-            ds["sample_age_at_recruitment"],
-            ds["sample_principal_component"][:, :npc],
-        )
+    covariates = np.concatenate(
+        [
+            ds["sample_genetic_sex"].values[:, np.newaxis],
+            ds["sample_principal_component"].values[:, :npc],
+        ],
+        axis=1,
     )
     assert np.all(np.isfinite(covariates))
     ds["sample_covariate"] = xr.DataArray(covariates, dims=("samples", "covariates"))
@@ -217,7 +230,7 @@ def run_qc_1(input_path: str, output_path: str):
     logger.info(
         f"Running stage 1 QC (input_path={input_path}, output_path={output_path})"
     )
-    ds = load_dataset(input_path, unpack=True)
+    ds = load_dataset(input_path, unpack=False, consolidated=False)
 
     logger.info(f"Loaded dataset:\n{ds}")
     chunks = get_chunks(ds)
@@ -236,7 +249,7 @@ def run_qc_2(input_path: str, sample_qc_path: str, output_path: str):
     logger.info(
         f"Running stage 1 QC (input_path={input_path}, output_path={output_path})"
     )
-    ds = load_dataset(input_path, consolidated=True)
+    ds = load_dataset(input_path, unpack=True, consolidated=True)
 
     logger.info(f"Loaded dataset:\n{ds}")
     chunks = get_chunks(ds)
@@ -257,85 +270,98 @@ def run_qc_2(input_path: str, sample_qc_path: str, output_path: str):
     logger.info("Done")
 
 
-def load_gwas_ds(genotypes_path: str, phenotypes_path: str) -> Dataset:
+def load_gwas_ds(
+    genotypes_path: str, phenotypes_path: str, dictionary_path: str
+) -> Dataset:
     ds = load_dataset(genotypes_path, consolidated=True)
     ds = add_covariates(ds)
-    ds = add_traits(ds, phenotypes_path)
+    ds = add_traits(ds, phenotypes_path, dictionary_path)
     ds = ds[[v for v in sorted(ds)]]
     return ds
 
 
-def run_trait_gwas(ds: Dataset, trait_index: int, trait_name: str) -> dd.DataFrame:
-    ds = ds.sel(samples=ds["sample_trait"][:, trait_index].notnull())
+def run_trait_gwas(
+    ds: Dataset, trait_index: int, trait_id: str, trait_name: str
+) -> pd.DataFrame:
+    ds = (
+        ds
+        # Promote to f4 to avoid:
+        # TypeError: array type float16 is unsupported in linalg
+        .assign(call_dosage=lambda ds: ds.call_dosage.astype("float32"))
+        # Subset to specific trait for regression
+        .assign(sample_trait_target=lambda ds: ds["sample_trait"][:, trait_index])
+        # Drop any other variables with the traits dimensions since they will
+        # not merge with a result having only one element in that dimension
+        .drop_dims("traits")
+        # Filter to complete cases
+        .pipe(lambda ds: ds.isel(samples=ds["sample_trait_target"].notnull().values))
+    )
     sample_size = ds.dims["samples"]
 
     logger.info(
-        f"Defining GWAS for trait {trait_name} (index={trait_index}) with {sample_size} samples"
-    )
-    ds = sg.gwas_linear_regression(
-        # Promote to f4 to avoid:
-        # TypeError: array type float16 is unsupported in linalg
-        ds.assign(call_dosage=lambda ds: ds.call_dosage.astype("float32")),
-        dosage="call_dosage",
-        covariates="sample_covariate",
-        traits="sample_trait_imputed",
-        add_intercept=True,
+        f"Running GWAS for trait '{trait_name}' (index={trait_index}, id={trait_id}) with {sample_size} samples"
     )
 
-    # Subset and convert to data frame for convenience
+    ds = sg.gwas_linear_regression(
+        ds,
+        dosage="call_dosage",
+        covariates="sample_covariate",
+        traits="sample_trait_target",
+        add_intercept=True,
+        merge=True,
+    )
+
+    # Project and convert to data frame for convenience
     # in downstream analysis/comparisons
-    ds = ds[
-        [
-            "variant_id",
-            "variant_contig",
-            "variant_contig_name",
-            "variant_p_value",
-            # Add after making lazy
-            # "variant_beta",
-            # "variant_t_value",
-        ]
-    ]
-    df = ds.to_dask_dataframe()
-    df = df.assign(trait_name=trait_name, sample_size=sample_size)
-    df = df.rename(columns={"traits": "trait_index", "variants": "variant_index"})
+    df = (
+        ds[["variant_id", "variant_contig", "variant_contig_name", "variant_p_value"]]
+        # This is necessary prior to `to_dask_dataframe`
+        # .unify_chunks().to_dask_dataframe()
+        .to_dataframe()
+        .reset_index()
+        .assign(trait_name=trait_name, trait_id=trait_id, sample_size=sample_size)
+        .rename(columns={"traits": "trait_index", "variants": "variant_index"})
+    )
     return df
 
 
 def run_gwas(
-    genotypes_path: str, phenotypes_path: str, output_path: str, remote: bool = True
+    genotypes_path: str, phenotypes_path: str, dictionary_path: str, output_path: str
 ):
     init()
 
-    # Add remote protocol to support snakemake `default-remote-prefix` feature
-    if remote:
-        genotypes_path = add_protocol(genotypes_path)
-        phenotypes_path = add_protocol(phenotypes_path)
-        output_path = add_protocol(output_path)
-
     logger.info(
-        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, output_path={output_path})"
+        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, dictionary_path={dictionary_path}, output_path={output_path})"
     )
 
-    ds = load_gwas_ds(genotypes_path, phenotypes_path)
+    ds = load_gwas_ds(genotypes_path, phenotypes_path, dictionary_path)
+
+    # Rechunk dosage (from 5216 x 5792 @ TOW) down to something smaller in the
+    # variants dimension since variant_chunk x n_sample arrays need to
+    # fit in memory for linear regression (652 * 365941 * 4 = 954MB)
+    ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
 
     logger.info(f"Loaded dataset:\n{ds}")
 
     results = []
-    trait_names = ds["sample_trait_names"].values
-    for trait_index, trait_name in enumerate(trait_names):
-        logger.info(
-            f"Processing trait {trait_index} of {len(trait_names)} ({trait_name})"
-        )
+    trait_names = ds["sample_trait_name"].values
+    trait_ids = ds["sample_trait_id"].values
+    for trait_index, trait_id in enumerate(trait_ids):
+        trait_name = trait_names[trait_index]
         with performance_report(
             filename=f"/tmp/gwas-{trait_name}-performance-report.html"
         ), get_task_stream(filename=f"/tmp/gwas-{trait_name}-task-stream.html"):
-            df = run_trait_gwas(ds, trait_index, trait_name)
-        results.append(df)
-    df = dd.concat(results)
+            df = run_trait_gwas(ds, trait_index, trait_id, trait_name)
+            results.append(df)
+    df = pd.concat(results)
 
-    sumstats_path = output_path + "/sumstats.parquet"
-    logger.info(f"Saving GWAS results to {sumstats_path}")
-    df.to_parquet(sumstats_path)
+    with performance_report(
+        filename="/tmp/gwas-save-performance-report.html"
+    ), get_task_stream(filename="/tmp/gwas-save-task-stream.html"):
+        sumstats_path = output_path + "/sumstats.parquet"
+        logger.info(f"Saving GWAS results to {sumstats_path}:\n")
+        df.info()
+        df.to_parquet(sumstats_path)
 
     ds = ds[
         [
@@ -356,8 +382,9 @@ def run_gwas(
             "sample_age_at_recruitment",
             "sample_ethnic_background",
             "sample_trait",
+            "sample_trait_id",
             "sample_trait_imputed",
-            "sample_trait_names",
+            "sample_trait_name",
         ]
     ]
     variables_path = output_path + "/variables.zarr"

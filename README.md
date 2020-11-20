@@ -24,6 +24,10 @@ certain phases of the pipeline will require an appropriately defined GKE cluster
 clusters should be created/modified/deleted when necessary as they can be very expensive,
 and the commands below show how to do that.
 
+## Tips
+
+- Never let fsspec overwrite zarr archives!  This technically works but it is incredibly slow compared to running "gsutil -m rm -rf <path>" yourself
+
 ### Create Cluster
 
 To create a GKE cluster that snakemake can execute rules on, follow these steps:
@@ -281,7 +285,7 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cloudprovider.py -- --interactive
-create(0); adapt(0, 20, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
+create(0, machine_type='n1-highmem-8'); adapt(0, 20, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
 conda activate snakemake
 source env.sh; source .env  
@@ -293,17 +297,23 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
     
-# Takes ~25 mins for 21/22 on 20 n1-standard-8 nodes
+# Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
+# Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation-qc/ukb_chr{XY,21,22}.ckpt
 
 # Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
+# Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
     
-# Takes ~4 mins for XY on 20 n1-highmem-8 nodes
+# See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step
+# If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
+# enough memory is not present or chunksizes suboptimal it can take > 3 hours
+# on 20 n1-highmem-8:
+# XY = 3 mins
 snakemake --use-conda --cores=1 --allowed-rules gwas \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{XY,21,22}.ckpt
