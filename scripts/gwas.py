@@ -355,13 +355,10 @@ def run_gwas(
             results.append(df)
     df = pd.concat(results)
 
-    with performance_report(
-        filename="/tmp/gwas-save-performance-report.html"
-    ), get_task_stream(filename="/tmp/gwas-save-task-stream.html"):
-        sumstats_path = output_path + "/sumstats.parquet"
-        logger.info(f"Saving GWAS results to {sumstats_path}:\n")
-        df.info()
-        df.to_parquet(sumstats_path)
+    sumstats_path = output_path + "/sumstats.parquet"
+    logger.info(f"Saving GWAS results to {sumstats_path}:\n")
+    df.info()
+    df.to_parquet(sumstats_path)
 
     ds = ds[
         [

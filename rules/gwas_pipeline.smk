@@ -49,3 +49,19 @@ rule gwas:
         "--output-path={params.output_path} "
         "&& touch {output}"
     
+    
+rule sumstat_merge:
+    output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet"
+    params:
+        # Note: lambda is important for braces in format to not be interpreted as snakemake wildcards
+        gwas_sumstats_path_fmt=lambda wc: bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{contig}/sumstats.parquet", True),
+        ot_sumstats_path_fmt=lambda wc: bucket_path("external/ot_nealelab_sumstats/{trait_id}_raw.neale2.gwas.imputed_v3.both_sexes.tsv.gz", True),
+        # TODO: decide how this should be parameterized -- it should be all contigs at some point 
+        contigs="21,22"
+    conda: "../envs/gwas.yaml"
+    shell:
+        "python scripts/validation.py merge_sumstats "
+        "--gwas-sumstats-path-fmt='{params.gwas_sumstats_path_fmt}' "
+        "--ot-sumstats-path-fmt='{params.ot_sumstats_path_fmt}' "
+        "--output-path={output} "
+        "--contigs={params.contigs} "

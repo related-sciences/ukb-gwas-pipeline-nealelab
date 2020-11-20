@@ -1,4 +1,4 @@
 {
     "EXTRA_CONDA_PACKAGES": "\"numba==0.51.2 xarray==0.16.1 gcsfs==0.7.1 dask-ml==1.7.0 zarr==2.4.0 pyarrow==2.0.0 -c conda-forge\"",
-    "EXTRA_PIP_PACKAGES": "\"git+https://github.com/pystatgen/sgkit.git@50ece8d9422ca6d94526ca402add13e87c12dfac#egg=sgkit\""
+    "EXTRA_PIP_PACKAGES": "\"git+https://github.com/pystatgen/sgkit.git@4e117c95cfc94675930dc1b31bb98741798f4c22#egg=sgkit\""
 }

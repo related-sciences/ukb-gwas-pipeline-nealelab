@@ -309,15 +309,18 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
     
-# See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step
+# See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step.
 # If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
 # enough memory is not present or chunksizes suboptimal it can take > 3 hours
-# on 20 n1-highmem-8:
-# XY = 3 mins
+# on 20 n1-highmem-8 nodes.
 snakemake --use-conda --cores=1 --allowed-rules gwas \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{XY,21,22}.ckpt
 
+# Takes ~10 mins on local host
+snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet
 
 ```
 

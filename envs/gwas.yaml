@@ -24,9 +24,8 @@ dependencies:
     - fire==0.3.1
     - numba==0.51.2
     - pyarrow==2.0.0
-    - jupyterlab
     - pip
     - pip:
         - cbgen==0.1.6
         - rechunker==0.3.1
-        - git+https://github.com/pystatgen/sgkit.git@50ece8d9422ca6d94526ca402add13e87c12dfac#egg=sgkit
+        - git+https://github.com/pystatgen/sgkit.git@4e117c95cfc94675930dc1b31bb98741798f4c22#egg=sgkit
