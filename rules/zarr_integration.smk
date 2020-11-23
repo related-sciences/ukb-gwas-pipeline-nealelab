@@ -7,8 +7,8 @@ rule plink_to_zarr:
     output: 
         "prep/gt-calls/ukb_chr{plink_contig}.ckpt"
     threads: gke_io_ncpu - 1
-    resources: mem_mb=gke_io_mem_mb - 5000
-    conda: "../envs/io.yaml"
+    resources: mem_mb=gke_io_mem_req_mb
+    conda: "../envs/gwas.yaml"
     params:
         zarr_path=lambda wc: bucket_path(f"prep/gt-calls/ukb_chr{wc.plink_contig}.zarr"),
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
@@ -36,8 +36,8 @@ rule bgen_to_zarr:
     output:
         "prep/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     threads: gke_io_ncpu - 1
-    resources: mem_mb=gke_io_mem_mb - 5000
-    conda: "../envs/io.yaml"
+    resources: mem_mb=gke_io_mem_req_mb
+    conda: "../envs/gwas.yaml"
     params:
         zarr_path=lambda wc: bucket_path(f"prep/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']

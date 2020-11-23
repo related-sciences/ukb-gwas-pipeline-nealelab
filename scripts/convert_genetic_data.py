@@ -265,7 +265,7 @@ def plink_to_zarr(
     )
     contig = Contig(name=contig_name, index=contig_index)
     ds = load_plink(paths, contig)
-    # TODO: Switch to rechunk method
+    # TODO: Switch to rechunker method
     save_dataset(output_path, ds, contig, scheduler="processes", remote=remote)
     logger.info("Done")
 
@@ -277,7 +277,7 @@ def bgen_to_zarr(
     output_path: str,
     contig_name: str,
     contig_index: int,
-    max_mem: str = "1GB",  # per-worker
+    max_mem: str = "500MB",  # per-worker
     remote: bool = True,
     region: Optional[Tuple[int, int]] = None,
 ):
