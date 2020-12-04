@@ -10,7 +10,7 @@ rule plink_to_zarr:
     resources: mem_mb=gke_io_mem_req_mb
     conda: "../envs/gwas.yaml"
     params:
-        zarr_path=lambda wc: bucket_path(f"prep/gt-calls/ukb_chr{wc.plink_contig}.zarr"),
+        zarr_path=lambda wc: bucket_path(f"prep/gt-calls/ukb_chr{wc.plink_contig}.zarr", True),
         contig_index=lambda wc: plink_contigs.loc[str(wc.plink_contig)]['index']
     shell:
         "python scripts/convert_genetic_data.py plink_to_zarr "
@@ -20,9 +20,8 @@ rule plink_to_zarr:
         "--output-path={params.zarr_path} "
         "--contig-name={wildcards.plink_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=True "
-        "&& touch {output}"
-
+        "--remote=True && "
+        "touch {output}"
 
 def bgen_samples_path(wc):
     n_samples = bgen_contigs.loc[wc.bgen_contig]['n_consent_samples']
@@ -39,7 +38,7 @@ rule bgen_to_zarr:
     resources: mem_mb=gke_io_mem_req_mb
     conda: "../envs/gwas.yaml"
     params:
-        zarr_path=lambda wc: bucket_path(f"prep/gt-imputation/ukb_chr{wc.bgen_contig}.zarr"),
+        zarr_path=lambda wc: bucket_path(f"prep/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
         contig_index=lambda wc: bgen_contigs.loc[str(wc.bgen_contig)]['index']
     shell:
         "python scripts/convert_genetic_data.py bgen_to_zarr "
@@ -49,5 +48,5 @@ rule bgen_to_zarr:
         "--output-path={params.zarr_path} "
         "--contig-name={wildcards.bgen_contig} "
         "--contig-index={params.contig_index} "
-        "--remote=True "
-        "&& touch {output}"
+        "--remote=True && "
+        "touch {output}"

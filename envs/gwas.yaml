@@ -5,7 +5,7 @@ dependencies:
     # Pin to versions in 2.30.0 dask docker image:
     # - https://hub.docker.com/layers/daskdev/dask/2.30.0/images/sha256-fb5d6b4eef7954448c244d0aa7b2405a507f9dad62ae29d9f869e284f0193c53?context=explore
     # - https://github.com/dask/dask-docker/blob/99fa808d4dac47b274b5063a23b5f3bbf0d3f105/base/Dockerfile
-    # - Versions exported from scheduler using `conda env export --from-history`
+    # - Versions exported from docker using `conda env export --from-history`
     - python==3.8.0
     - numpy==1.18.1
     - distributed==2.30.0

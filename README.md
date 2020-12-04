@@ -26,7 +26,10 @@ conda env create -f envs/snakemake.yaml
 conda activate snakemake
 ```
 
-Note: This will be mentioned frequently in the steps that follow, but it will be assumed when not stated otherwise
+Notes: 
+
+- All `gcloud` commands should be issued from this environment (particularly for Kubernetes) since commands are version-sensitive and will often fail if you run commands for a cluster using different `gcloud` versions (i.e. from different environments).
+- This will be mentioned frequently in the steps that follow, but it will be assumed when not stated otherwise
 that all commands are run from the root of this repo and that the `.env` as well as `env.sh` files have both been sourced.
 
 The `.env` file contains more sensitive variable settings and a prototype for this file is shown here:
@@ -123,7 +126,7 @@ kubectl get nodes
 kubectl drain gke-ukb-io-1-default-pool-276513bc-48k5 --force --ignore-daemonsets
 gcloud container clusters describe ukb-io-1 --zone us-east1-c 
 # Find instance group name: gke-ukb-io-1-default-pool-276513bc-grp
-gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone us-east1-c 
+gcloud compute instance-groups managed delete-instances gke-ukb-io-1-default-pool-276513bc-grp --instances=gke-ukb-io-1-default-pool-276513bc-48k5 --zone $GCP_ZONE
 ```
 
 ### Dask Cloud Provider
@@ -176,10 +179,11 @@ To see the Dask UI for this cluster, run this on any workstation (outside of GCP
 The UI is then available at `http://localhost:8799`.
 
 
-
-## Execution
+# Execution
 
 All of the following should be run from the root directory from this repo. 
+
+Note that you can preview the effects of any snakemake command below by adding `-np` to the end. This will show the inputs/outputs to a command as well as any shell code that would be run for it.
 
 ```bash
 # Run this first before any of the steps below
@@ -250,31 +254,57 @@ gcloud container clusters create \
   --machine-type custom-${GKE_IO_NCPU}-${GKE_IO_MEM_MB} \
   --disk-type pd-standard \
   --disk-size ${GKE_IO_DISK_GB}G \
-  --num-nodes 2 \
+  --num-nodes 1 \
+  --enable-autoscaling --min-nodes 1 --max-nodes 9 \
   --zone $GCP_ZONE \
   --node-locations $GCP_ZONE \
   --cluster-version latest \
   --scopes storage-rw \
   $GKE_IO_NAME
   
+  
+# Run all jobs
+# This takes a couple minutes for snakemake to even dry-run, so specifying
+# targets yourself is generally faster and more flexible (as shown in the next commands)
+snakemake --kubernetes --use-conda --cores=23 --local-cores=1 --restart-times 3 \
+--default-remote-provider GS --default-remote-prefix rs-ukb \
+--allowed-rules bgen_to_zarr 
+
 # Generate single zarr archive from bgen
 # * Set local cores to 1 so that only one rule runs at a time on cluster hosts
-snakemake --kubernetes --use-conda --local-cores=1 \
+snakemake --kubernetes --use-conda --local-cores=1 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation/ukb_chrXY.ckpt
 # Expecting running time (8 vCPUs): ~30 minutes
 
-# Resize cluster and run on more files:
-gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 2 --zone $GCP_ZONE
-snakemake --kubernetes --use-conda --cores=2 --local-cores=1 \
+# Scale up to larger files
+snakemake --kubernetes --use-conda --cores=2 --local-cores=1 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation/ukb_chr{21,22}.ckpt
 # Expecting running time (8 vCPUs): 12 - 14 hours
 
+# Run all chromosomes
+# timings on 32 vCPUs:
+# chr20/19 - 5 hrs
+# chr18/17 - 6 hrs
+# chr16 - 6 hrs 40 mins
+# timings on 64 vCPUs:
+# chr12 - 7.75 hrs
+# chr7 - 9 hrs
+# chr11 - 8 hrs
+# Common reasons for failures:
+# https://github.com/dask/gcsfs/issues/315
+# https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/20
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 5 --zone $GCP_ZONE
-snakemake --kubernetes --use-conda --cores=5 --local-cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep/gt-imputation/ukb_chr{16,17,18,19,20}.ckpt
+snakemake --kubernetes --use-conda --cores=5 --local-cores=1 --restart-times 3 \
+--default-remote-provider GS --default-remote-prefix rs-ukb \
+rs-ukb/prep/gt-imputation/ukb_chr{1,2,3,4,5,6,8,9,10,13,14,15}.ckpt
+
+snakemake --kubernetes --use-conda --cores=5 --local-cores=1 --restart-times 3 \
+--default-remote-provider GS --default-remote-prefix rs-ukb --allowed-rules bgen_to_zarr -np
+
+# Note: With autoscaling, you may see this often on startup:
+# Unknown pod snakejob-9174e1f0-c94c-5c76-a3d2-d15af6dd49cb. Has the pod been deleted manually?
 
 # Delete the cluster
 gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
@@ -328,9 +358,11 @@ snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
 
 ```
 
-## Tips
+## Misc
 
 - Never let fsspec overwrite Zarr archives!  This technically works but it is incredibly slow compared to running "gsutil -m rm -rf <path>" yourself.  Another way to phrase this is that if you are expecting a pipeline step to overwrite an existing Zarr archive, delete it manually first.
+- To run the snakemake container manually, e.g. if you want to debug a GKE job, run `docker run --rm -it -v $HOME/repos/ukb-gwas-pipeline-nealelab:/tmp/ukb-gwas-pipeline-nealelab snakemake/snakemake:v5.30.1 /bin/bash`
+    - This version should match that of the snakemake version used in the `snakemake.yaml` environment
 
 ## Debug
 
