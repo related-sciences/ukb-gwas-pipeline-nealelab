@@ -292,6 +292,7 @@ snakemake --kubernetes --use-conda --cores=2 --local-cores=1 --restart-times 3 \
 # chr12 - 7.75 hrs
 # chr7 - 9 hrs
 # chr11 - 8 hrs
+# chr4 - 9 hrs 50 mins
 # Common reasons for failures:
 # https://github.com/dask/gcsfs/issues/315
 # https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/20
@@ -303,8 +304,8 @@ rs-ukb/prep/gt-imputation/ukb_chr{1,2,3,4,5,6,8,9,10,13,14,15}.ckpt
 snakemake --kubernetes --use-conda --cores=5 --local-cores=1 --restart-times 3 \
 --default-remote-provider GS --default-remote-prefix rs-ukb --allowed-rules bgen_to_zarr -np
 
-# Note: With autoscaling, you may see this often on startup:
-# Unknown pod snakejob-9174e1f0-c94c-5c76-a3d2-d15af6dd49cb. Has the pod been deleted manually?
+# Note: With autoscaling, you may will always see one job fail and then get restarted with an error like this
+# "Unknown pod snakejob-9174e1f0-c94c-5c76-a3d2-d15af6dd49cb. Has the pod been deleted manually?"
 
 # Delete the cluster
 gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE

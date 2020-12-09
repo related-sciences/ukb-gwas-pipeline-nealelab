@@ -154,13 +154,30 @@ def add_traits(ds: Dataset, phenotypes_path: str, dictionary_path: str) -> Datas
     return ds.reset_index("samples").reset_coords(drop=True)
 
 
-def add_covariates(ds: Dataset, npc: int = 10) -> Dataset:
-    covariates = np.concatenate(
+def add_covariates(ds: Dataset, npc: int = 20) -> Dataset:
+    # See https://github.com/Nealelab/UK_Biobank_GWAS/blob/master/0.1/22.run_regressions.py#L71
+    ds = (
+        ds.assign(
+            sample_age_at_recruitment_2=lambda ds: ds["sample_age_at_recruitment"] ** 2
+        )
+        .assign(
+            sample_sex_x_age=lambda ds: ds["sample_genetic_sex"]
+            * ds["sample_age_at_recruitment"]
+        )
+        .assign(
+            sample_sex_x_age_2=lambda ds: ds["sample_genetic_sex"]
+            * ds["sample_age_at_recruitment_2"]
+        )
+    )
+    covariates = np.column_stack(
         [
-            ds["sample_genetic_sex"].values[:, np.newaxis],
+            ds["sample_age_at_recruitment"].values,
+            ds["sample_age_at_recruitment_2"].values,
+            ds["sample_genetic_sex"].values,
+            ds["sample_sex_x_age"].values,
+            ds["sample_sex_x_age_2"].values,
             ds["sample_principal_component"].values[:, :npc],
-        ],
-        axis=1,
+        ]
     )
     assert np.all(np.isfinite(covariates))
     ds["sample_covariate"] = xr.DataArray(covariates, dims=("samples", "covariates"))
@@ -314,7 +331,15 @@ def run_trait_gwas(
     # Project and convert to data frame for convenience
     # in downstream analysis/comparisons
     df = (
-        ds[["variant_id", "variant_contig", "variant_contig_name", "variant_p_value"]]
+        ds[
+            [
+                "variant_id",
+                "variant_contig",
+                "variant_contig_name",
+                "variant_p_value",
+                "variant_beta",
+            ]
+        ]
         # This is necessary prior to `to_dask_dataframe`
         # .unify_chunks().to_dask_dataframe()
         .to_dataframe()
