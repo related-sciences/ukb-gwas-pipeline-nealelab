@@ -9,4 +9,4 @@ dependencies:
     - fire==0.3.1
     - pip
     - pip:
-        - git+https://github.com/dask/dask-cloudprovider.git@35deeb415e061ca90973fd24e56b1b7a6f54bc16#egg=dask-cloudprovider[gcp]
+        - git+https://github.com/dask/dask-cloudprovider.git@ad4eb0eb7444c35ce3beaedc4c510abe6706f03e#egg=dask-cloudprovider[gcp]

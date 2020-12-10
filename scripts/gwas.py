@@ -155,7 +155,7 @@ def add_traits(ds: Dataset, phenotypes_path: str, dictionary_path: str) -> Datas
 
 
 def add_covariates(ds: Dataset, npc: int = 20) -> Dataset:
-    # See https://github.com/Nealelab/UK_Biobank_GWAS/blob/master/0.1/22.run_regressions.py#L71
+    # See https://github.com/Nealelab/UK_Biobank_GWAS/blob/67289386a851a213f7bb470a3f0f6af95933b041/0.1/22.run_regressions.py#L71
     ds = (
         ds.assign(
             sample_age_at_recruitment_2=lambda ds: ds["sample_age_at_recruitment"] ** 2
