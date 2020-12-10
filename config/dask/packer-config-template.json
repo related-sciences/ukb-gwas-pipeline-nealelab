@@ -1,0 +1,34 @@
+{
+    "variables": {
+         "project_id": "{{env `GCP_PROJECT`}}",
+         "region": "{{env `GCP_REGION`}}",
+         "zone": "{{env `GCP_ZONE`}}"
+     },
+    "builders": [ 
+        {
+           "type": "googlecompute",
+           "project_id": "{{user `project_id`}}",
+           "region": "{{user `region`}}",
+           "zone": "{{user `zone`}}",
+           "machine_type": "n1-standard-8",
+           "ssh_username": "packer",
+           "source_image": "ubuntu-minimal-1804-bionic-v20201014", 
+           "on_host_maintenance": "TERMINATE",
+           "image_description": "UKB GWAS Dask Image",
+           "image_name": "ukb-gwas-pipeline-nealelab-dask-{{timestamp}}",
+           "image_licenses": ["projects/vm-options/global/licenses/enable-vmx"],
+           "disk_size": 50,  
+           "metadata": {
+               "user-data": ""
+           }
+        }
+     ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "inline": [
+                "echo 'Waiting for cloud-init'; while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 1; done; echo 'Done'"
+            ]
+        }
+    ]
+}

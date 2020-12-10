@@ -5,17 +5,11 @@
 # python scripts/cloudprovider.py -- --interactive
 #
 import json
-import os
 
 import fire
 from dask_cloudprovider.gcp.instances import GCPCluster
 
 cluster = None
-
-ENV_VAR_FILE = os.environ.get("ENV_VAR_FILE", "config/dask/env_vars.json")
-
-with open(ENV_VAR_FILE, "r") as f:
-    DEFAULT_ENV_VARS = json.load(f)
 
 
 def _validate():
@@ -23,7 +17,11 @@ def _validate():
         raise ValueError("Must create cluster first with `create` function")
 
 
-def create(n_workers=None, env_vars=DEFAULT_ENV_VARS, name=None, **kwargs):
+def create(n_workers=None, env_var_file=None, name=None, **kwargs):
+    env_vars = {}
+    if env_var_file:
+        with open(env_var_file, "r") as f:
+            env_vars = json.load(f)
     global cluster
     cluster = GCPCluster(name=name, n_workers=n_workers, env_vars=env_vars, **kwargs)
     print("Cluster created")
