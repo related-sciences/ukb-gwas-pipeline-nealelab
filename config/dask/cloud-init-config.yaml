@@ -1,5 +1,6 @@
 #cloud-config
 
+
 # Bootstrap
 packages:
   - apt-transport-https
@@ -26,6 +27,7 @@ system_info:
 
 
 runcmd:
+  
   # Install Docker
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
   - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
@@ -33,5 +35,12 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io
   - systemctl start docker
   - systemctl enable docker
+  
+
+  
+
   # Run container
-  - 'docker run --net=host   -e PUBLIC_INGRESS=False  -e EXTRA_CONDA_PACKAGES="python==3.8.0 numpy==1.18.1 distributed==2.30.0 tornado==6.0.4 dask==2.30.0 xarray==0.16.1 tini==0.18.0 lz4==3.1.0 cytoolz==0.11.0 nomkl==1.0 zarr==2.4.0 pandas==1.0.1 python-blosc==1.9.2 dask-ml==1.7.0 gcsfs==0.7.1 fire==0.3.1 numba==0.51.2 pyarrow==2.0.0 -c conda-forge"  -e EXTRA_PIP_PACKAGES="cbgen==0.1.6 rechunker==0.3.1 bed-reader==0.1.1 git+https://github.com/pystatgen/sgkit.git@c5548821653fa2759421668092716d2036834ffe#egg=sgkit" daskdev/dask:2.30.0 dask-scheduler --version'
+  - 'docker run --net=host   -e PUBLIC_INGRESS=False eczech/ukb-gwas-pipeline-nealelab:v2.30.0
+ dask-scheduler --version'
+
+  

@@ -134,3 +134,6 @@ data/
 .snakemake
 rs-ukb/
 dask-worker-space
+
+# Produced by Packer for debugging
+gce_googlecompute.pem
