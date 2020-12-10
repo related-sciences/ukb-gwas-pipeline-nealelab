@@ -3,6 +3,7 @@ import json
 import warnings
 
 import fire
+import yaml
 from dask_cloudprovider.gcp import GCPCluster
 
 # Ignore:
@@ -31,6 +32,22 @@ def get_cloud_init_config():
     config = GCPCluster.get_cloud_init(
         docker_image=docker_image, bootstrap=True, env_vars=dict(PUBLIC_INGRESS=False),
     )
+
+    # Parse the config to add instructions to install google monitoring agent
+    # https://cloud.google.com/monitoring/agent/installation
+    config = yaml.safe_load(config)
+    config["runcmd"].extend(
+        [
+            "curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh",
+            "bash add-monitoring-agent-repo.sh",
+            "apt-get update -y",
+            "apt-get install -y stackdriver-agent",
+            "service stackdriver-agent start",
+        ]
+    )
+    config = yaml.dump(config)
+    config = f"#cloud-config\n{config}"
+
     return config
 
 
