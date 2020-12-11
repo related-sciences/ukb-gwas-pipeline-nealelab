@@ -460,6 +460,8 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 # Chr 18 took 12 mins on 67 n1-highmem-8 nodes (fixed cluster after failed rescale from 50)
 # Chr 11 took 22 mins on 65 n1-highmem-8 nodes (fresh fixed cluster)
 # Chr 9 took 19 mins on 61 n1-highmem-16 nodes (fresh fixed)
+# Chr 4 took 59 mins on 61 n1-highmem-16 nodes (fresh fixed)
+# Chr 7 took 45 mins on 61 n1-highmem-16 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation-qc/ukb_chr{1,2,3,4,5,6,7,8,9,10,13,16}.ckpt
