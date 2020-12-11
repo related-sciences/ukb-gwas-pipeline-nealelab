@@ -63,11 +63,12 @@ def load_dataset(
     return ds
 
 
-def save_dataset(ds: Dataset, path: str):
+def save_dataset(ds: Dataset, path: str, retries: int = 3):
     store = fsspec.get_mapper(path, check=False, create=False)
     for v in ds:
         ds[v].encoding.pop("chunks", None)
-    ds.to_zarr(store, mode="w", consolidated=True)
+    task = ds.to_zarr(store, mode="w", consolidated=True, compute=False)
+    task.compute(retries=retries)
 
 
 def load_sample_qc(sample_qc_path: str) -> Dataset:

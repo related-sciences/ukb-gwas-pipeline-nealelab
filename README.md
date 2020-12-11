@@ -435,8 +435,9 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 # In a separate terminal/screen:
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
-python scripts/cluster/cloud-provider.py -- --interactive
-create(0, machine_type='n1-highmem-8'); adapt(0, 20, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
+python scripts/cluster/cloudprovider.py -- --interactive
+create(0, machine_type='n1-highmem-8', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
+adapt(0, 50, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
 conda activate snakemake
 source env.sh; source .env  
@@ -447,7 +448,7 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-f0bc0892-scheduler --ssh-flag="-L 8799:localhost:8787"
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-454ca9f7-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
@@ -457,6 +458,10 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 \
 
 # Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
 # Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
+# Chr 12 took 28 mins on 50 n1-highmem-8 nodes (adaptive)
+# Chr 17 took 10 mins on 50 n1-highmem-8 nodes (fixed cluster)
+# Chr 20 took 9 mins on 50 n1-highmem-8 nodes (fixed cluster)
+# Chr 19 took 8 mins on 50 n1-highmem-8 nodes (fixed cluster)
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
@@ -474,6 +479,9 @@ snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet
 
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/gt-imputation-qc/ukb_chr{11,12,13,14,15,16,17,18,19,20}.ckpt
 ```
 
 ## Misc
