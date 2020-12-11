@@ -448,20 +448,25 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-454ca9f7-scheduler --ssh-flag="-L 8799:localhost:8787"
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-06d2a979-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
-snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep/gt-imputation-qc/ukb_chr{XY,21,22}.ckpt
-
-# Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
-# Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
 # Chr 12 took 28 mins on 50 n1-highmem-8 nodes (adaptive)
 # Chr 17 took 10 mins on 50 n1-highmem-8 nodes (fixed cluster)
 # Chr 20 took 9 mins on 50 n1-highmem-8 nodes (fixed cluster)
 # Chr 19 took 8 mins on 50 n1-highmem-8 nodes (fixed cluster)
+# Chr 14 took 20 mins on 67 n1-highmem-8 nodes (fixed cluster after failed rescale from 50)
+# Chr 18 took 12 mins on 67 n1-highmem-8 nodes (fixed cluster after failed rescale from 50)
+# Chr 11 took 22 mins on 65 n1-highmem-8 nodes (fresh fixed cluster)
+# Chr 9 took 19 mins on 61 n1-highmem-16 nodes (fresh fixed)
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/gt-imputation-qc/ukb_chr{1,2,3,4,5,6,7,8,9,10,13,16}.ckpt
+    
+
+# Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
+# Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt

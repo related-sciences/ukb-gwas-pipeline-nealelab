@@ -215,9 +215,15 @@ def apply_sample_qc_1(ds: Dataset, sample_qc_path: str) -> Dataset:
 
 
 def sample_qc_1(ds: Dataset) -> Dataset:
-    # See: https://github.com/Nealelab/UK_Biobank_GWAS#imputed-v3-sample-qc
+    # See:
+    # - https://github.com/Nealelab/UK_Biobank_GWAS#imputed-v3-sample-qc
+    # - https://github.com/Nealelab/UK_Biobank_GWAS/blob/master/0.1/04.subset_samples.py
     filters = {
         "no_aneuploidy": ds.sample_sex_chromosome_aneuploidy.isnull(),
+        "has_age": ds.sample_age_at_recruitment.notnull(),
+        "in_phasing_chromosome_x": ds.sample_use_in_phasing_chromosome_x == 1,
+        "in_in_phasing_chromosomes_1_22": ds.sample_use_in_phasing_chromosomes_1_22
+        == 1,
         "in_pca": ds.sample_used_in_genetic_principal_components == 1,
         # 1001 = White/British, 1002 = Mixed/Irish
         "in_ethnic_groups": ds.sample_ethnic_background.isin([1001, 1002]),
