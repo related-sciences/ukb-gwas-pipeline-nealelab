@@ -432,6 +432,8 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 
 
 ```
+# TODO: note somewhere that default quotas of 1000 cpus and 70 IPs will make 62 n1-highmem-16 largest cluster possible
+
 # In a separate terminal/screen:
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
@@ -448,7 +450,7 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-06d2a979-scheduler --ssh-flag="-L 8799:localhost:8787"
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-1294815d-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
@@ -462,6 +464,8 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 # Chr 9 took 19 mins on 61 n1-highmem-16 nodes (fresh fixed)
 # Chr 4 took 59 mins on 61 n1-highmem-16 nodes (fresh fixed)
 # Chr 7 took 45 mins on 61 n1-highmem-16 nodes
+# Chr 13 took 19 mins on 61 n1-highmem-16 nodes
+# Chr 2 took 58 mins on 60 n1-highmem-16 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation-qc/ukb_chr{1,2,3,4,5,6,7,8,9,10,13,16}.ckpt
@@ -469,7 +473,10 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-time
 
 # Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
 # Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
-snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 \
+# Takes ~6 mins for chr 21 on 60 n1-highmem-16 nodes
+# Takes ~52 mins for chr 6 on 60 n1-highmem-16 nodes
+# Takes ~20 mins for chr 8 on 60 n1-highmem-16 nodes
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
     

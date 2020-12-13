@@ -14,12 +14,14 @@ rule qc_filter_stage_1:
         
 # Apply more complex QC filters
 rule qc_filter_stage_2:
-    input: "prep/gt-imputation-qc/ukb_chr{bgen_contig}.ckpt"
+    input: 
+        "prep/gt-imputation-qc/ukb_chr{bgen_contig}.ckpt",
+        "prep/main/ukb_sample_qc.ckpt"
     output: "pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     params: 
         input_path=lambda wc: bucket_path(f"prep/gt-imputation-qc/ukb_chr{wc.bgen_contig}.zarr", True),
-        output_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
-        sample_qc_path=bucket_path("prep/main/ukb_sample_qc.zarr", True)
+        sample_qc_path=bucket_path("prep/main/ukb_sample_qc.zarr", True),
+        output_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True)
     conda: "../envs/gwas.yaml"
     shell:
         "python scripts/gwas.py run_qc_2 "

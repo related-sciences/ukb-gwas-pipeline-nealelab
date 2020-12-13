@@ -43,25 +43,3 @@ rule extract_sample_qc_zarr:
         "--output-path={params.output_path} "
         "--remote=True && "
         "touch {output}"
-
-# Direct sample matches may not be necessary for reproduction. Leave this
-# here though until we can be sure that the sample ids are recoverable through
-# custom QC steps:
-# rule extract_sample_sets:
-#     input:
-#         # This was downloaded manually from the NealeLab results spreadsheet
-#         # before all the Dropbox links broke
-#         # See: https://docs.google.com/spreadsheets/d/1kvPoupSzsSFBNSztMzl04xMoSC3Kcx3CrjVf4yBmESU/edit?ts=5b5f17db#gid=178908679
-#         # TODO: Update to download as separate step when it's possible to get these files
-#         european_samples="pipe/external/nealelab_v3_20180731/european_samples.tsv"
-#     output:
-#         # pipe/nealelab_rapid_gwas/import
-#         # pipe/nealelab_rapid_gwas/run/202008
-#         "pipe/external/nealelab_v3_20180731/extract/sample_sets.csv"
-#     conda:
-#         "envs/spark.yaml"
-#     shell:
-#         "export SPARK_DRIVER_MEMORY=10g && "
-#         "python scripts/extract_external_data.py nlv3_sample_sets "
-#         "--input-path-european-samples={input.european_samples} "
-#         "--output-path={output}"

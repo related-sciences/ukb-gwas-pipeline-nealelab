@@ -20,6 +20,8 @@ SAMPLE_QC_COLS = {
     "x22008_0_0": "genotype_measurement_well",
     "x22001_0_0": "genetic_sex",
     "x22021_0_0": "genetic_kinship_to_other_participants",
+    # This is boolean flag (as float) that "Indicates samples who self-identified as 'White British' according to Field 21000"
+    # https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=22006
     "x22006_0_0": "genetic_ethnic_grouping",
     "x22019_0_0": "sex_chromosome_aneuploidy",
     "x22027_0_0": "outliers_for_heterozygosity_or_missing_rate",
