@@ -2,12 +2,13 @@
 # precursor to PHESANT phenotype normalization
 rule main_csv_phesant_field_prep:
     input: f"raw/main/ukb.csv"
-    output: "prep/main/ukb.phesant.csv"
+    output: "prep/main/ukb_phesant.csv"
     conda: "../envs/phesant.yaml"
     shell:
         "Rscript scripts/external/phesant_phenotype_prep.R {input} {output}"
         
 
+# Dump genetic data QC samples
 rule extract_gwas_qc_sample_ids:
     # Note: autosome sample ids are superset of XY contig sample ids and all autosomes have same samples
     input: "pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr22.ckpt"
@@ -18,14 +19,15 @@ rule extract_gwas_qc_sample_ids:
     shell:
         "python scripts/extract_sample_ids.py run {params.input_path} {output}"
 
+# Subset phenotype data to genetic data QC samples
 rule filter_phesant_csv:
     input: 
         sample_id_path=rules.extract_gwas_qc_sample_ids.output,
         input_path=rules.main_csv_phesant_field_prep.output
-    output: "prep/main/ukb.phesant.filtered.csv"
-    conda: "../envs/spark.yaml"
+    output: "prep/main/ukb_phesant_filtered.csv"
+    conda: "../envs/gwas.yaml"
     shell:
-        "python scripts/convert_main_data.py filter_phesant_csv "
+        "python scripts/extract_main_data.py phesant_qc_csv "
         "--input-path={input.input_path} "
         "--sample-id-path={input.sample_id_path} "
         "--output-path={output} "
@@ -33,13 +35,13 @@ rule filter_phesant_csv:
 # Clone hash from PHESANT codebase (there are no documented tags/releases)
 rule phesant_clone:
     output:
-        "temp/repos/PHESANT"
+        directory("temp/repos/PHESANT")
     shell:
-        # Checkout from https://github.com/astheeggeggs/PHESANT/commit/0179587186cbcf53f4536076aa8cb7b1e6435672
+        # Fork with updates from https://github.com/astheeggeggs/PHESANT/commit/0179587186cbcf53f4536076aa8cb7b1e6435672
         "mkdir -p {output} && cd {output}/.. && "
-        "git clone https://github.com/astheeggeggs/PHESANT.git && "
+        "git clone https://github.com/eric-czech/PHESANT.git && "
         "cd PHESANT && "
-        "git checkout 0179587186cbcf53f4536076aa8cb7b1e6435672"
+        "git checkout 05997a79c734a0706f7622e8c9c734984f1da130"
 
 # Generate a phenotype subset for experimentation using some common polygenic conditions
 # rule main_csv_phesant_variable_list:
@@ -55,26 +57,39 @@ rule phesant_clone:
 # Run PHESANT phenotype normalization
 rule main_csv_phesant_phenotypes:
     input: 
-        phesant_repo=rules.phesant_clone.output,
-        phenotypes_file=rules.filter_phesant_csv.output,
-        variables_file="temp/repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv",
-        coding_file="temp/repos/PHESANT/variable-info/data-coding-ordinal-info-nov2019-update.txt"
-    output: "prep/main/ukb_phesant_phenotypes-subset01.csv"
+        # Note: You cannot link this to output of rule that created it as a directory,
+        # it must be some file or you will get a "MissingInputException" error.  You 
+        # can specify that this is a directory, but then a warning is thrown like
+        # "cannot use directory as input".
+        phesant_repo="temp/repos/PHESANT/README.md",
+        phenotypes_file=rules.filter_phesant_csv.output
+    output: "prep/main/ukb_phesant_phenotypes.csv"
+    params:
+        variables_file="../variable-info/outcome_info_final_pharma_nov2019.tsv",
+        coding_file="../variable-info/data-coding-ordinal-info-nov2019-update.txt"
     conda: "../envs/phesant.yaml"
     shell:
-        "cd rs-ukb/temp/repos/PHESANT/WAS && "
+        # These hacks handle package installations that were not valid according to conda 
+        # dependency rules (i.e. optparse + r + data.table of any version) and symlink to tsv in 
+        # order to alter delimiter expected in R script
+        "R -e \"install.packages(c('optparse', 'bit64'))\" && "
+        "OUTPUT_FILE=`readlink -f {output}` && "
+        "PHENOTYPE_FILE_CSV=`readlink -f {input.phenotypes_file}` && "
+        "PHENOTYPE_FILE_TSV=`echo ${{PHENOTYPE_FILE_CSV%.csv}}.tsv` && "
+        "ln -sf $PHENOTYPE_FILE_CSV $PHENOTYPE_FILE_TSV && "
+        "cd `dirname {input.phesant_repo}`/WAS && "
         "rm -rf /tmp/phesant && "
         "mkdir -p /tmp/phesant && "
         "Rscript phenomeScan.r "
-        "--phenofile={input.phenotypes_file} "
-        "--variablelistfile={input.variables_file} "
-        "--datacodingfile=../variable-info/data-coding-ordinal-info-nov2019-update.txt "
+        "--phenofile=$PHENOTYPE_FILE_TSV "
+        "--variablelistfile={params.variables_file} "
+        "--datacodingfile={params.coding_file} "
         "--userId=userId "
-        "--out=phenotypes-subset01 "
+        "--out=phenotypes "
         "--resDir=/tmp/phesant "
         "--partIdx=1 "
         "--numParts=1 && "
-        "cp /tmp/phesant/phenotypes-subset01.1.tsv {output}"
+        "cp /tmp/phesant/phenotypes.1.tsv $OUTPUT_FILE"
 
 
 # Extract the numeric UKB field ids in columns as a separate csv

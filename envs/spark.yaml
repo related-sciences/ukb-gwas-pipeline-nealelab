@@ -2,7 +2,7 @@ name: spark
 channels:
     - conda-forge
 dependencies:
-    - python=3.8
+    - python=3.7
     - gsutil=4.53
     - fire=0.3
     - pyspark=3.0.0

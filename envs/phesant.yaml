@@ -1,6 +1,12 @@
+name: phesant
 channels:
- - r
+  - r
+  - defaults
 dependencies:
- - r=3.4.1
- - r-optparse=1.4.4
- - r-data.table=1.10.4_3
+  - r=3.5.1
+  - r-data.table=1.11.4
+  # * The original code was run with these dependencies, which are not valid according to conda:
+  # - r=3.4.1
+  # - r-data.table=1.10.4_3
+  # - r-optparse=1.4.4  
+  # There appears to be no combination of r + optparse + data.table=1.10.4_3 that is compatible

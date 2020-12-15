@@ -2,6 +2,12 @@
 # Lift from https://github.com/atgu/ukbb_pan_ancestry/blob/d124cde1888f85bc19ee7dd2f4619bd65f5e8616/reengineering_phenofile_neale_lab2.r
 # * Modified for input/output paths
 
+# /* Edits of original script
+# Set this to ensure that empty strings in phenotypes are interpreted properly 
+# (the data.table version is slightly different, 1.11.4 vs 1.10.4_3)
+options(datatable.na.strings=c("", "NA"))
+# */
+
 library("data.table")
 
 args = commandArgs(trailingOnly=TRUE)

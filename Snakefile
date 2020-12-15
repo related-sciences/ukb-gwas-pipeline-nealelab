@@ -41,9 +41,9 @@ rule all:
             bgen_contig=bgen_contigs['name']
         ),
         "prep/main/ukb.ckpt",
-        #"prep/main/meta/data_dictionary_showcase.csv",
-        #"prep/main/ukb_sample_qc.csv",
-        #"prep/main/ukb_sample_qc.ckpt",
+        "prep/main/meta/data_dictionary_showcase.csv",
+        "prep/main/ukb_sample_qc.csv",
+        "prep/main/ukb_sample_qc.ckpt",
         expand(
             "pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{bgen_contig}.ckpt", 
             bgen_contig=bgen_contigs['name']

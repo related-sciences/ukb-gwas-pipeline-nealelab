@@ -4,6 +4,7 @@ import logging.config
 from pathlib import Path
 
 import fire
+import pandas as pd
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
 logger = logging.getLogger(__name__)
@@ -142,6 +143,29 @@ def sample_qc_zarr(input_path: str, output_path: str, remote: bool):
     logger.info(f"Sample QC dataset:\n{ds}")
     logger.info(f"Saving zarr archive at {output_path}")
     ds.to_zarr(store, mode="w", consolidated=True)
+
+
+def phesant_qc_csv(input_path: str, sample_id_path: str, output_path: str):
+    logger.info(
+        f"Filtering csv at {input_path} to {output_path} (using samples at {sample_id_path})"
+    )
+    sample_ids = pd.read_csv(sample_id_path, sep="\t")
+    sample_ids = [int(v) for v in set(sample_ids.sample_id.values)]
+    logger.info(f"Loaded {len(sample_ids)} sample ids to filter to")
+
+    df = pd.read_csv(
+        input_path,
+        sep="\t",
+        dtype=str,
+        keep_default_na=False,
+        na_values=None,
+        na_filter=False,
+    )
+    df["userId"] = df["userId"].astype(int)
+    logger.info(f"Number of records before filter = {len(df)}")
+    df = df[df["userId"].isin(sample_ids)]
+    logger.info(f"Number of records after filter = {len(df)}")
+    df.to_csv(output_path, index=False, sep="\t")
 
 
 if __name__ == "__main__":

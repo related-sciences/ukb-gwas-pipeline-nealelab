@@ -327,39 +327,6 @@ snakemake --use-conda --cores=1 \
     rs-ukb/pipe-data/external/ukb_meta/data_dictionary_showcase.csv
 ```
 
-## Phenotype Prep
-
-These steps can be run locally, but the local machine must be resized
-to have at least 200G RAM.  They can alternatively be run on a GKE
-cluster by adding `--kubernetes` to the commands below.
-
-```bash
-# Create the input PHESANT phenotype CSV (takes ~15 mins)
-snakemake --use-conda --cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb_phesant_prep.csv
-    
-# Create the phenotype subset to be used for validation
-snakemake --use-conda --cores=1 \
-    repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv
-    
-# Generate the normalized phenotype data (takes several hours)
-snakemake --use-conda --cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb_phesant_phenotypes-subset01.csv
-
-# Dump the resulting field ids into a separate csv for debugging
-snakemake --use-conda --cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep-data/main/ukb_phesant_phenotypes-subset01.field_ids.csv -n
-    
-# Copy Neale Lab sumstats from Open Targets
-snakemake --use-conda --cores=1 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
-    
-```
-
 ## Zarr Integration
 
 
@@ -480,6 +447,66 @@ snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 --restart-time
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
     
+snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/gt-imputation-qc/ukb_chr{11,12,13,14,15,16,17,18,19,20}.ckpt
+```
+
+## Phenotype Prep
+
+These steps can be run locally, but the local machine must be resized
+to have at least 200G RAM.  They can alternatively be run on a GKE
+cluster by adding `--kubernetes` to the commands below.
+
+```bash
+conda activate snakemake
+source env.sh; source .env;
+
+# Create the input PHESANT phenotype CSV (takes ~15 mins)
+snakemake --use-conda --cores=1 --allowed-rules main_csv_phesant_field_prep \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep-data/main/ukb_phesant_prep.csv
+    
+# Extract sample ids from genetic data QC (~1 minute)
+snakemake --use-conda --cores=1 --allowed-rules extract_gwas_qc_sample_ids \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/sample_ids.csv
+
+# Clone PHESANT repository to download normalization script and metadata files
+snakemake --use-conda --cores=1 --allowed-rules phesant_clone \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/temp/repos/PHESANT
+
+# Use genetic data QC sample ids as filter on samples used in phenotype preparation (takes ~40 mins, uses 120G RAM)
+snakemake --use-conda --cores=1 --allowed-rules filter_phesant_csv \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/main/ukb_phesant_filtered.csv
+    
+# Create the phenotype subset to be used for validation ** TODO: remove - not needed at full scale
+# snakemake --use-conda --cores=1 \
+#    repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv
+    
+# Generate the normalized phenotype data (takes many hours)
+# Started at 3:30 pm -> ?
+snakemake --use-conda --cores=1 --allowed-rules main_csv_phesant_phenotypes \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/main/ukb_phesant_phenotypes.csv
+
+# Dump the resulting field ids into a separate csv for debugging
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/main/ukb_phesant_phenotypes.field_ids.csv -n
+    
+# Copy Neale Lab sumstats from Open Targets
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
+    
+```
+
+## GWAS 
+
+```
 # See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step.
 # If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
 # enough memory is not present or chunksizes suboptimal it can take > 3 hours
@@ -492,10 +519,6 @@ snakemake --use-conda --cores=1 --allowed-rules gwas \
 snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet
-
-snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
-    --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep/gt-imputation-qc/ukb_chr{11,12,13,14,15,16,17,18,19,20}.ckpt
 ```
 
 ## Misc
