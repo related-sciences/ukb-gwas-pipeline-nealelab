@@ -7,13 +7,13 @@ This pipeline is a WIP, but it will attempt to reproduce this [GWAS](http://www.
 To run this [snakemake](https://snakemake.readthedocs.io/en/stable/) pipeline, the following infrastructure will be utilized at one point or another:
 
 1. A development [GCE](https://cloud.google.com/compute) VM 
-    - It is possible for this workstation to exist outside of GCP, but that is not recommended because all clusters configured will not be addressable externally (you will have to add firewall rules or modify the cluster installations)
+    - It is possible for this workstation to exist outside of GCP, but that is not recommended because all clusters configured will not be addressable externally on ports beyond ssh (you will have to add firewall rules and/or modify the cluster installations)
 2. [GKE](https://cloud.google.com/kubernetes-engine) clusters
     - These are created for tasks that run arbitrary snakemake jobs but do not need a Dask cluster
 3. Dask clusters
     - These will be managed using [Dask Cloud Provider](https://cloudprovider.dask.org/en/latest/)
 
-The development VM should be used to issue snakemake commands and will run some parts of the pipeline locally.  This means that the development VM should have ~24G RM and ~100G disk space.  It is possible to move these steps on to external GKE clusters, but script execution is faster and easier to debug on a local machine.
+The development VM should be used to issue snakemake commands and will run some parts of the pipeline locally.  This means that the development VM should have ~24G RAM and ~100G disk space.  It is possible to move these steps on to external GKE clusters, but script execution is faster and easier to debug on a local machine.
 
 ## Setup
 
@@ -482,31 +482,41 @@ snakemake --use-conda --cores=1 --allowed-rules filter_phesant_csv \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/main/ukb_phesant_filtered.csv
     
-# Create the phenotype subset to be used for validation ** TODO: remove - not needed at full scale
-# snakemake --use-conda --cores=1 \
-#    repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv
-    
-# Generate the normalized phenotype data (takes many hours)
-# Started at 3:30 pm -> ?
+# Generate the normalized phenotype data (took 8 hrs and 24 minutes on 8 vCPU / 300 GB RAM)
 snakemake --use-conda --cores=1 --allowed-rules main_csv_phesant_phenotypes \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep/main/ukb_phesant_phenotypes.csv
+    rs-ukb/prep/main/ukb_phesant_phenotypes.csv > phesant.log 2>&1
+    
+# This isn't stricly necessary, but these logs should be preserved for future debugging
+gsutil cp /tmp/phesant/phenotypes.1.log gs://rs-ukb/prep/main/log/phesant/phenotypes.1.log
+gsutil cp phesant.log gs://rs-ukb/prep/main/log/phesant/phesant.log
 
 # Dump the resulting field ids into a separate csv for debugging
-snakemake --use-conda --cores=1 \
+snakemake --use-conda --cores=1 --allowed-rules main_csv_phesant_phenotypes_field_id_export \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/prep/main/ukb_phesant_phenotypes.field_ids.csv -n
+    rs-ukb/prep/main/ukb_phesant_phenotypes.field_ids.csv
     
-# Copy Neale Lab sumstats from Open Targets
-snakemake --use-conda --cores=1 \
+# Convert the phenotype data to parquet
+snakemake --use-conda --cores=1 --allowed-rules convert_phesant_csv_to_parquet \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
+    rs-ukb/prep/main/ukb_phesant_phenotypes.parquet.ckpt
+    
+# Convert the phenotype data to zarr
+snakemake --use-conda --cores=1 --allowed-rules convert_phesant_parquet_to_zarr \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/prep/main/ukb_phesant_phenotypes.zarr.ckpt
     
 ```
 
 ## GWAS 
 
 ```
+# Copy Neale Lab sumstats from Open Targets
+snakemake --use-conda --cores=1 \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
+    
+# Generate sumstats using sgkit    
 # See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step.
 # If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
 # enough memory is not present or chunksizes suboptimal it can take > 3 hours

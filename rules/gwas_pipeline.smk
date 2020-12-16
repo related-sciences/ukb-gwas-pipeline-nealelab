@@ -51,7 +51,7 @@ rule gwas:
         "--output-path={params.output_path} "
         "&& touch {output}"
     
-    
+# Combine sumstats produced here with those from external source (Open Targets)
 rule sumstat_merge:
     output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet"
     params:

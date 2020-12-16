@@ -111,7 +111,7 @@ TRAIT_IDS = [
 
 
 def load_traits(phenotypes_path: str, dictionary_path: str):
-    df = pd.read_csv(phenotypes_path, sep="\t")
+    df = pd.read_parquet(phenotypes_path)
     ds = (
         df[["userId"]]
         .rename(columns={"userId": "id"})

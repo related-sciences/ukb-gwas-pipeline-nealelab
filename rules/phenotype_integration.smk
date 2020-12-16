@@ -43,17 +43,6 @@ rule phesant_clone:
         "cd PHESANT && "
         "git checkout 05997a79c734a0706f7622e8c9c734984f1da130"
 
-# Generate a phenotype subset for experimentation using some common polygenic conditions
-# rule main_csv_phesant_variable_list:
-#     input: rules.phesant_clone.output
-#     # Follow Duncan Palmer's suggestion on the appropriate variable metadata file
-#     output:"temp/repos/PHESANT/variable-info/outcome_info_final_pharma_nov2019.tsv-subset01.tsv"
-#     conda: "../envs/spark.yaml"
-#     shell:
-#         "python scripts/create_phesant_variable_list.py run "
-#         "--input-path={input} "
-#         "--output-path={output} "
-
 # Run PHESANT phenotype normalization
 rule main_csv_phesant_phenotypes:
     input: 
@@ -112,3 +101,33 @@ rule main_csv_phesant_phenotypes_field_id_export:
             f.write("ukb_field_id\n")
             for field_id in field_ids:
                 f.write(str(field_id) + "\n")
+
+rule convert_phesant_csv_to_parquet:
+    input: rules.main_csv_phesant_phenotypes.output
+    output: rules.main_csv_phesant_phenotypes.output[0].replace('.csv', '.parquet.ckpt')
+    params:
+        output_path=bucket_path(rules.main_csv_phesant_phenotypes.output[0].replace('.csv', '.parquet'))
+    conda: "../envs/spark.yaml"
+    shell:
+        "export SPARK_DRIVER_MEMORY=12g && "
+        "python scripts/convert_phesant_data.py to_parquet "
+        "--input-path={input} "
+        "--output-path={params.output_path} && "
+        "gsutil -m -q rsync -d -r {params.output_path} gs://{params.output_path} && "
+        "touch {output}"
+        
+rule convert_phesant_parquet_to_zarr:
+    input: rules.convert_phesant_csv_to_parquet.output
+    output: rules.convert_phesant_csv_to_parquet.output[0].replace('.parquet.ckpt', '.zarr.ckpt')
+    params:
+        input_path=bucket_path(rules.convert_phesant_csv_to_parquet.output[0].replace('.parquet.ckpt', '.parquet'), True),
+        output_path=bucket_path(rules.convert_phesant_csv_to_parquet.output[0].replace('.parquet.ckpt', '.zarr'), True),
+        dictionary_path=bucket_path("prep/main/meta/data_dictionary_showcase.csv", True)
+    conda: "../envs/gwas.yaml"
+    shell:
+        "python scripts/convert_phesant_data.py to_zarr "
+        "--input-path={params.input_path} "
+        "--dictionary-path={params.dictionary_path} "
+        "--output-path={params.output_path} && "
+        "touch {output}"
+        
