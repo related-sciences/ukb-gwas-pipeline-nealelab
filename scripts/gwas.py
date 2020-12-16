@@ -1,8 +1,9 @@
 import logging
 import logging.config
 import os
+import warnings
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Sequence, Union
 from urllib.parse import urlparse
 
 import dask
@@ -13,8 +14,11 @@ import numpy as np
 import pandas as pd
 import sgkit as sg
 import xarray as xr
+
+warnings.filterwarnings("error")
+
 from dask.diagnostics import ProgressBar
-from dask.distributed import Client, get_task_stream, performance_report
+from dask.distributed import Client  # , get_task_stream, performance_report
 from sgkit.io.bgen.bgen_reader import unpack_variables
 from xarray import DataArray, Dataset
 
@@ -104,55 +108,20 @@ def apply_filters(ds: Dataset, filters: Dict[str, Any], dim: str) -> Dataset:
     return ds.isel(**{dim: mask})
 
 
-TRAIT_IDS = [
-    "50",  # Height (https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=50)
-    "23098",  # Weight (https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=23098)
-]
-
-
-def load_traits(phenotypes_path: str, dictionary_path: str):
-    df = pd.read_parquet(phenotypes_path)
-    ds = (
-        df[["userId"]]
-        .rename(columns={"userId": "id"})
-        .rename_axis("samples", axis="rows")
-        .to_xarray()
-        .drop("samples")
-    )
-    trait_id_to_name = (
-        pd.read_csv(
-            dictionary_path,
-            sep=",",
-            usecols=["FieldID", "Field"],
-            dtype={"FieldID": str, "Field": str},
+def add_traits(ds: Dataset, phenotypes_path: str) -> Dataset:
+    ds_tr = load_dataset(phenotypes_path, consolidated=True)
+    with warnings.catch_warnings():
+        # Ignore this performance warning since rechunking/reorder the phenotype data is not a big scalability issue
+        warnings.filterwarnings(
+            "ignore",
+            message="Slicing with an out-of-order index is generating .* times more chunks",
         )
-        .set_index("FieldID")["Field"]
-        .to_dict()
-    )
-    ds["trait"] = xr.DataArray(df[TRAIT_IDS].values, dims=("samples", "traits"))
-    ds["trait_id"] = xr.DataArray(np.array(TRAIT_IDS, dtype=str), dims="traits")
-    ds["trait_imputed"] = ds.trait.pipe(
-        lambda x: x.where(x.notnull(), x.mean(dim="samples"))
-    )
-    ds["trait_name"] = xr.DataArray(
-        np.array(
-            [trait_id_to_name[trait_id] for trait_id in ds["trait_id"].values],
-            dtype=str,
-        ),
-        dims="traits",
-    )
-    ds = ds.rename_vars({v: f"sample_{v}" for v in ds})
-    return ds
-
-
-def add_traits(ds: Dataset, phenotypes_path: str, dictionary_path: str) -> Dataset:
-    ds_tr = load_traits(phenotypes_path, dictionary_path)
-    ds = ds.assign_coords(samples=lambda ds: ds.sample_id).merge(
-        ds_tr.assign_coords(samples=lambda ds: ds.sample_id),
-        join="left",
-        compat="override",
-    )
-    return ds.reset_index("samples").reset_coords(drop=True)
+        ds = ds.assign_coords(samples=lambda ds: ds.sample_id).merge(
+            ds_tr.assign_coords(samples=lambda ds: ds.sample_id),
+            join="left",
+            compat="override",
+        )
+        return ds.reset_index("samples").reset_coords(drop=True)
 
 
 def add_covariates(ds: Dataset, npc: int = 20) -> Dataset:
@@ -294,43 +263,34 @@ def run_qc_2(input_path: str, sample_qc_path: str, output_path: str):
     logger.info("Done")
 
 
-def load_gwas_ds(
-    genotypes_path: str, phenotypes_path: str, dictionary_path: str
-) -> Dataset:
+def load_gwas_ds(genotypes_path: str, phenotypes_path: str) -> Dataset:
     ds = load_dataset(genotypes_path, consolidated=True)
     ds = add_covariates(ds)
-    ds = add_traits(ds, phenotypes_path, dictionary_path)
+    ds = add_traits(ds, phenotypes_path)
     ds = ds[[v for v in sorted(ds)]]
     return ds
 
 
-def run_trait_gwas(
-    ds: Dataset, trait_index: int, trait_id: str, trait_name: str
-) -> pd.DataFrame:
-    ds = (
-        ds
-        # Promote to f4 to avoid:
-        # TypeError: array type float16 is unsupported in linalg
-        .assign(call_dosage=lambda ds: ds.call_dosage.astype("float32"))
-        # Subset to specific trait for regression
-        .assign(sample_trait_target=lambda ds: ds["sample_trait"][:, trait_index])
-        # Drop any other variables with the traits dimensions since they will
-        # not merge with a result having only one element in that dimension
-        .drop_dims("traits")
-        # Filter to complete cases
-        .pipe(lambda ds: ds.isel(samples=ds["sample_trait_target"].notnull().values))
-    )
+def run_trait_gwas(ds: Dataset, trait_group_id: int, trait_name: str) -> pd.DataFrame:
+    assert ds["sample_trait_group_id"].to_series().nunique() == 1
+    assert ds["sample_trait_name"].to_series().nunique() == 1
+
+    # Filter to complete cases
+    ds = ds.isel(samples=ds["sample_trait"].notnull().all(dim="traits").values)
     sample_size = ds.dims["samples"]
 
     logger.info(
-        f"Running GWAS for trait '{trait_name}' (index={trait_index}, id={trait_id}) with {sample_size} samples"
+        f"Running GWAS for trait '{trait_name}' (id={trait_group_id}) with {sample_size} samples, {ds.dims['traits']} phenotypes"
     )
+
+    # ds = ds.isel(variants=slice(10), samples=slice(100)) # TODO: REMOVE
+    logger.info(f"GWAS dataset:\n{ds}")
 
     ds = sg.gwas_linear_regression(
         ds,
         dosage="call_dosage",
         covariates="sample_covariate",
-        traits="sample_trait_target",
+        traits="sample_trait",
         add_intercept=True,
         merge=True,
     )
@@ -340,6 +300,10 @@ def run_trait_gwas(
     df = (
         ds[
             [
+                "sample_trait_id",
+                "sample_trait_name",
+                "sample_trait_group_id",
+                "sample_trait_code_id",
                 "variant_id",
                 "variant_contig",
                 "variant_contig_name",
@@ -351,22 +315,30 @@ def run_trait_gwas(
         # .unify_chunks().to_dask_dataframe()
         .to_dataframe()
         .reset_index()
-        .assign(trait_name=trait_name, trait_id=trait_id, sample_size=sample_size)
+        .assign(sample_size=sample_size)
         .rename(columns={"traits": "trait_index", "variants": "variant_index"})
     )
     return df
 
 
 def run_gwas(
-    genotypes_path: str, phenotypes_path: str, dictionary_path: str, output_path: str
+    genotypes_path: str,
+    phenotypes_path: str,
+    output_path: str,
+    batch_size: int = 100,
+    trait_group_ids: Optional[Sequence[Union[str, int]]] = None,
 ):
     init()
 
     logger.info(
-        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, dictionary_path={dictionary_path}, output_path={output_path})"
+        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, output_path={output_path})"
     )
 
-    ds = load_gwas_ds(genotypes_path, phenotypes_path, dictionary_path)
+    ds = load_gwas_ds(genotypes_path, phenotypes_path)
+
+    # Promote to f4 to avoid:
+    # TypeError: array type float16 is unsupported in linalg
+    ds["call_dosage"] = ds["call_dosage"].astype("float32")
 
     # Rechunk dosage (from 5216 x 5792 @ TOW) down to something smaller in the
     # variants dimension since variant_chunk x n_sample arrays need to
@@ -375,22 +347,44 @@ def run_gwas(
 
     logger.info(f"Loaded dataset:\n{ds}")
 
-    results = []
-    trait_names = ds["sample_trait_name"].values
-    trait_ids = ds["sample_trait_id"].values
-    for trait_index, trait_id in enumerate(trait_ids):
-        trait_name = trait_names[trait_index]
-        with performance_report(
-            filename=f"/tmp/gwas-{trait_name}-performance-report.html"
-        ), get_task_stream(filename=f"/tmp/gwas-{trait_name}-task-stream.html"):
-            df = run_trait_gwas(ds, trait_index, trait_id, trait_name)
-            results.append(df)
-    df = pd.concat(results)
+    # Determine the UKB field ids corresponding to all phenotypes to be used
+    # * a `trait_group_id` is equivalent to a UKB field id
+    if trait_group_ids is None:
+        trait_group_ids = list(map(int, np.unique(ds["sample_trait_group_id"].values)))
+    else:
+        trait_group_ids = [int(v) for v in trait_group_ids]
+    logger.info(f"Using {len(trait_group_ids)} phenotype groups")
 
-    sumstats_path = output_path + "/sumstats.parquet"
-    logger.info(f"Saving GWAS results to {sumstats_path}:\n")
-    df.info()
-    df.to_parquet(sumstats_path)
+    # Loop through the trait groups and run separate regressions for each.
+    # Note that the majority of groups (89%) have only one phenotype/trait
+    # associated, some (10%) have between 1 and 10 phenotypes and ~1% have
+    # large numbers of phenotypes (into the hundreds or thousands).
+    trait_names = ds["sample_trait_name"].values
+    for i, trait_group_id in enumerate(trait_group_ids):
+        # Determine which individual phenotypes should be regressed as part of this group
+        mask = (ds["sample_trait_group_id"] == trait_group_id).values
+        index = np.sort(np.argwhere(mask).ravel())
+        trait_name = trait_names[index][0]
+
+        # Break into batches due to some trait groups having >1000 phenotypes
+        batches = np.array_split(index, np.ceil(len(index) / batch_size))
+        logger.info(
+            f"Generated {len(batches)} batch(es) for trait '{trait_name}' (id={trait_group_id})"
+        )
+        results = []
+        for j, batch in enumerate(batches):
+            dsg = ds.isel(traits=batch)
+            df = run_trait_gwas(dsg, trait_group_id, trait_name)
+            df = df.assign(batch_index=j, batch_size=len(batch))
+            results.append(df)
+
+        # Concatenate and save all results for this group
+        df = pd.concat(results)
+        path = f"{output_path}/sumstats-{trait_group_id}.parquet"
+        logger.info(
+            f"Saving results for trait '{trait_name}' (id={trait_group_id}) to path {path}"
+        )
+        df.to_parquet(path)
 
     ds = ds[
         [
@@ -412,7 +406,8 @@ def run_gwas(
             "sample_ethnic_background",
             "sample_trait",
             "sample_trait_id",
-            "sample_trait_imputed",
+            "sample_trait_group_id",
+            "sample_trait_code_id",
             "sample_trait_name",
         ]
     ]

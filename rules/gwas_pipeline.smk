@@ -34,20 +34,18 @@ rule qc_filter_stage_2:
 rule gwas:
     input:
         genotypes_ckpt="pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{bgen_contig}.ckpt",
-        phenotypes_ckpt="prep/main/ukb_phesant_phenotypes-subset01.csv"
+        phenotypes_ckpt="prep/main/ukb_phesant_phenotypes.zarr.ckpt"
     output: 
         "pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     params:
         genotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
-        phenotypes_path=lambda wc: bucket_path("prep/main/ukb_phesant_phenotypes-subset01.csv", True),
-        dictionary_path=lambda wc: bucket_path("prep/main/meta/data_dictionary_showcase.csv", True),
+        phenotypes_path=lambda wc: bucket_path(f"prep/main/ukb_phesant_phenotypes.zarr", True),
         output_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{wc.bgen_contig}", True)
     conda: "../envs/gwas.yaml"
     shell:
         "python scripts/gwas.py run_gwas "
         "--genotypes-path={params.genotypes_path} "
         "--phenotypes-path={params.phenotypes_path} "
-        "--dictionary-path={params.dictionary_path} "
         "--output-path={params.output_path} "
         "&& touch {output}"
     
