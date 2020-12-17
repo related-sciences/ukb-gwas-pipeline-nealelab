@@ -40,14 +40,19 @@ rule gwas:
     params:
         genotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
         phenotypes_path=lambda wc: bucket_path(f"prep/main/ukb_phesant_phenotypes.zarr", True),
-        output_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{wc.bgen_contig}", True)
+        sumstats_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/sumstats/ukb_chr{wc.bgen_contig}", True),
+        variables_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/variables/ukb_chr{wc.bgen_contig}", True)
     conda: "../envs/gwas.yaml"
     shell:
         "python scripts/gwas.py run_gwas "
         "--genotypes-path={params.genotypes_path} "
         "--phenotypes-path={params.phenotypes_path} "
-        "--output-path={params.output_path} "
+        "--sumstats-path={params.sumstats_path} "
+        "--variables-path={params.variables_path} "
+        "--trait-group-ids=[9999999] "
         "&& touch {output}"
+        
+#        "--trait-group-ids=[50,23098,31,20101] "
     
 # Combine sumstats produced here with those from external source (Open Targets)
 rule sumstat_merge:

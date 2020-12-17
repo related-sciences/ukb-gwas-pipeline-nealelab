@@ -68,5 +68,28 @@ def to_zarr(input_path: str, output_path: str, dictionary_path: str):
     logger.info("Done")
 
 
+def sort_zarr(input_path: str, genotypes_path: str, output_path: str):
+    import fsspec
+    import xarray as xr
+
+    ds_tr = xr.open_zarr(fsspec.get_mapper(input_path), consolidated=True)
+    ds_gt = xr.open_zarr(fsspec.get_mapper(genotypes_path), consolidated=True)
+
+    # Sort trait data using genomic data sample ids;
+    # Note that this will typically produce a warning like:
+    # "PerformanceWarning: Slicing with an out-of-order index is generating 69909 times more chunks"
+    # which is OK since the purpose of this step is to incur this cost once
+    # instead of many times in a repetitive GWAS workflow
+    ds = ds_tr.set_index(samples="sample_id").sel(samples=ds_gt.sample_id)
+    ds = ds.rename_vars({"samples": "sample_id"}).reset_coords("sample_id")
+
+    # Restore chunkings; reordered traits array will have many chunks
+    # of size 1 in samples dim without this
+    for v in ds_tr:
+        ds[v] = ds[v].chunk(ds_tr[v].data.chunksize)
+
+    ds.to_zarr(fsspec.get_mapper(output_path), consolidated=True, mode="w")
+
+
 if __name__ == "__main__":
     fire.Fire()

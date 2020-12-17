@@ -131,3 +131,19 @@ rule convert_phesant_parquet_to_zarr:
         "--output-path={params.output_path} && "
         "touch {output}"
         
+        
+rule sort_phesant_parquet_zarr:
+    input: rules.convert_phesant_parquet_to_zarr.output
+    output: "pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt"
+    params:
+        input_path=bucket_path(rules.convert_phesant_parquet_to_zarr.output[0].replace('.zarr.ckpt', '.zarr'), True),
+        genotypes_path=bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr22.zarr", True),
+        output_path=bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.zarr", True)
+    conda: "../envs/gwas.yaml"
+    shell:
+        "python scripts/convert_phesant_data.py sort_zarr "
+        "--input-path={params.input_path} "
+        "--genotypes-path={params.genotypes_path} "
+        "--output-path={params.output_path} && "
+        "touch {output}"
+        

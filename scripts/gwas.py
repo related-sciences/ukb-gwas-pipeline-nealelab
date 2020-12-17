@@ -14,9 +14,6 @@ import numpy as np
 import pandas as pd
 import sgkit as sg
 import xarray as xr
-
-warnings.filterwarnings("error")
-
 from dask.diagnostics import ProgressBar
 from dask.distributed import Client  # , get_task_stream, performance_report
 from sgkit.io.bgen.bgen_reader import unpack_variables
@@ -271,7 +268,9 @@ def load_gwas_ds(genotypes_path: str, phenotypes_path: str) -> Dataset:
     return ds
 
 
-def run_trait_gwas(ds: Dataset, trait_group_id: int, trait_name: str) -> pd.DataFrame:
+def run_trait_gwas(
+    ds: Dataset, trait_group_id: int, trait_name: str, min_samples: int
+) -> pd.DataFrame:
     assert ds["sample_trait_group_id"].to_series().nunique() == 1
     assert ds["sample_trait_name"].to_series().nunique() == 1
 
@@ -279,12 +278,21 @@ def run_trait_gwas(ds: Dataset, trait_group_id: int, trait_name: str) -> pd.Data
     ds = ds.isel(samples=ds["sample_trait"].notnull().all(dim="traits").values)
     sample_size = ds.dims["samples"]
 
+    # Bypass if sample size too small
+    if sample_size < min_samples:
+        logger.warning(
+            f"Sample size ({sample_size}) too small (<{min_samples}) for trait '{trait_name}' (id={trait_group_id})"
+        )
+        return None
+
     logger.info(
-        f"Running GWAS for trait '{trait_name}' (id={trait_group_id}) with {sample_size} samples, {ds.dims['traits']} phenotypes"
+        f"Running GWAS for trait '{trait_name}' (id={trait_group_id}) with {sample_size} samples, {ds.dims['traits']} traits"
     )
 
-    # ds = ds.isel(variants=slice(10), samples=slice(100)) # TODO: REMOVE
-    logger.info(f"GWAS dataset:\n{ds}")
+    ds = ds.isel(variants=slice(25), samples=slice(100))  # TODO: REMOVE
+    logger.debug(
+        f"Input dataset for trait '{trait_name}' (id={trait_group_id}) GWAS:\n{ds}"
+    )
 
     ds = sg.gwas_linear_regression(
         ds,
@@ -311,8 +319,6 @@ def run_trait_gwas(ds: Dataset, trait_group_id: int, trait_name: str) -> pd.Data
                 "variant_beta",
             ]
         ]
-        # This is necessary prior to `to_dask_dataframe`
-        # .unify_chunks().to_dask_dataframe()
         .to_dataframe()
         .reset_index()
         .assign(sample_size=sample_size)
@@ -324,14 +330,17 @@ def run_trait_gwas(ds: Dataset, trait_group_id: int, trait_name: str) -> pd.Data
 def run_gwas(
     genotypes_path: str,
     phenotypes_path: str,
-    output_path: str,
+    sumstats_path: str,
+    variables_path: str,
     batch_size: int = 100,
     trait_group_ids: Optional[Sequence[Union[str, int]]] = None,
+    min_samples: int = 100,
 ):
     init()
 
     logger.info(
-        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, output_path={output_path})"
+        f"Running GWAS (genotypes_path={genotypes_path}, phenotypes_path={phenotypes_path}, "
+        f"sumstats_path={sumstats_path}, variables_path={variables_path})"
     )
 
     ds = load_gwas_ds(genotypes_path, phenotypes_path)
@@ -343,6 +352,7 @@ def run_gwas(
     # Rechunk dosage (from 5216 x 5792 @ TOW) down to something smaller in the
     # variants dimension since variant_chunk x n_sample arrays need to
     # fit in memory for linear regression (652 * 365941 * 4 = 954MB)
+    # See: https://github.com/pystatgen/sgkit/issues/390
     ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
 
     logger.info(f"Loaded dataset:\n{ds}")
@@ -353,38 +363,47 @@ def run_gwas(
         trait_group_ids = list(map(int, np.unique(ds["sample_trait_group_id"].values)))
     else:
         trait_group_ids = [int(v) for v in trait_group_ids]
-    logger.info(f"Using {len(trait_group_ids)} phenotype groups")
+    logger.info(f"Using {len(trait_group_ids)} trait groups")
 
     # Loop through the trait groups and run separate regressions for each.
     # Note that the majority of groups (89%) have only one phenotype/trait
     # associated, some (10%) have between 1 and 10 phenotypes and ~1% have
     # large numbers of phenotypes (into the hundreds or thousands).
     trait_names = ds["sample_trait_name"].values
-    for i, trait_group_id in enumerate(trait_group_ids):
-        # Determine which individual phenotypes should be regressed as part of this group
+    for trait_group_id in trait_group_ids:
+        # Determine which individual traits should be regressed as part of this group
         mask = (ds["sample_trait_group_id"] == trait_group_id).values
         index = np.sort(np.argwhere(mask).ravel())
+        if len(index) == 0:
+            logger.warning(
+                f"Trait group id {trait_group_id} not found in data (skipping)"
+            )
+            continue
         trait_name = trait_names[index][0]
 
-        # Break into batches due to some trait groups having >1000 phenotypes
+        # Break the traits for this group into batches of some maximum size
         batches = np.array_split(index, np.ceil(len(index) / batch_size))
-        logger.info(
-            f"Generated {len(batches)} batch(es) for trait '{trait_name}' (id={trait_group_id})"
-        )
-        results = []
-        for j, batch in enumerate(batches):
+        if len(batches) > 1:
+            logger.info(
+                f"Broke {len(index)} traits for '{trait_name}' (id={trait_group_id}) into {len(batches)} batches"
+            )
+        for batch_index, batch in enumerate(batches):
             dsg = ds.isel(traits=batch)
-            df = run_trait_gwas(dsg, trait_group_id, trait_name)
-            df = df.assign(batch_index=j, batch_size=len(batch))
-            results.append(df)
-
-        # Concatenate and save all results for this group
-        df = pd.concat(results)
-        path = f"{output_path}/sumstats-{trait_group_id}.parquet"
-        logger.info(
-            f"Saving results for trait '{trait_name}' (id={trait_group_id}) to path {path}"
-        )
-        df.to_parquet(path)
+            df = run_trait_gwas(
+                dsg, trait_group_id, trait_name, min_samples=min_samples
+            )
+            if df is not None:
+                # Write results for all traits in the batch together so that partitions
+                # will have a maximum possible size determined by trait batch size
+                # and number of variants in the current contig
+                df = df.assign(batch_index=batch_index, batch_size=len(batch))
+                path = f"{sumstats_path}_{batch_index:03d}_{trait_group_id}.parquet"
+                logger.info(
+                    f"Saving results for trait '{trait_name}' id={trait_group_id}, "
+                    f"batch={batch_index} to path {path}"
+                )
+                df.to_parquet(path)
+    logger.info("Sumstat generation complete")
 
     ds = ds[
         [
@@ -411,9 +430,10 @@ def run_gwas(
             "sample_trait_name",
         ]
     ]
-    variables_path = output_path + "/variables.zarr"
-    logger.info(f"Saving GWAS variables to {variables_path}:\n{ds}")
-    save_dataset(ds, variables_path)
+    ds = ds.chunk("auto")
+    path = variables_path + "_variables.zarr"
+    logger.info(f"Saving GWAS variables to {path}:\n{ds}")
+    save_dataset(ds, path)
 
     logger.info("Done")
 

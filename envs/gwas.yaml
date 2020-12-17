@@ -21,6 +21,7 @@ dependencies:
     - python-blosc==1.9.2
     - dask-ml==1.7.0
     - gcsfs==0.7.1
+    - msgpack-python=1.0.0
     - fire==0.3.1
     - numba==0.51.2
     - pyarrow==2.0.0

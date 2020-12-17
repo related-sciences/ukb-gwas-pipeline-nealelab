@@ -401,13 +401,16 @@ gcloud container clusters delete $GKE_IO_NAME --zone $GCP_ZONE
 ```
 # TODO: note somewhere that default quotas of 1000 cpus and 70 IPs will make 62 n1-highmem-16 largest cluster possible
 
-# In a separate terminal/screen:
+# Create the cluster
+screen -S cluster
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cluster/cloudprovider.py -- --interactive
-create(0, machine_type='n1-highmem-8', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
+create(0, machine_type='n1-highmem-16', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
 adapt(0, 50, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
+# Run the workflows
+screen -S snakemake
 conda activate snakemake
 source env.sh; source .env  
 export DASK_SCHEDULER_IP=`cat /tmp/scheduler-info.txt | grep internal_ip | cut -d'=' -f 2`
@@ -417,7 +420,7 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-1294815d-scheduler --ssh-flag="-L 8799:localhost:8787"
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-c5e61972-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
@@ -505,6 +508,11 @@ snakemake --use-conda --cores=1 --allowed-rules convert_phesant_csv_to_parquet \
 snakemake --use-conda --cores=1 --allowed-rules convert_phesant_parquet_to_zarr \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/main/ukb_phesant_phenotypes.zarr.ckpt
+    
+# Sort the zarr according to the sample ids in imputed genotyping data
+snakemake --use-conda --cores=1 --allowed-rules sort_phesant_parquet_zarr \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt -np
     
 ```
 
