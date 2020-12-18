@@ -34,12 +34,12 @@ rule qc_filter_stage_2:
 rule gwas:
     input:
         genotypes_ckpt="pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{bgen_contig}.ckpt",
-        phenotypes_ckpt="prep/main/ukb_phesant_phenotypes.zarr.ckpt"
+        phenotypes_ckpt="pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt"
     output: 
         "pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     params:
         genotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
-        phenotypes_path=lambda wc: bucket_path(f"prep/main/ukb_phesant_phenotypes.zarr", True),
+        phenotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.zarr", True),
         sumstats_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/sumstats/ukb_chr{wc.bgen_contig}", True),
         variables_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/variables/ukb_chr{wc.bgen_contig}", True)
     conda: "../envs/gwas.yaml"
@@ -49,24 +49,27 @@ rule gwas:
         "--phenotypes-path={params.phenotypes_path} "
         "--sumstats-path={params.sumstats_path} "
         "--variables-path={params.variables_path} "
-        "--trait-group-ids=[9999999] "
         "&& touch {output}"
-        
-#        "--trait-group-ids=[50,23098,31,20101] "
+
+# "--trait-group-ids=[1990,20095] "
+# "--trait-group-ids=[50,23098] "
     
 # Combine sumstats produced here with those from external source (Open Targets)
-rule sumstat_merge:
-    output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet"
+rule sumstats:
+    output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats-1990-20095.parquet"
+    #output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats-50-23098.parquet"
+    #output: "pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet"
     params:
         # Note: lambda is important for braces in format to not be interpreted as snakemake wildcards
-        gwas_sumstats_path_fmt=lambda wc: bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{contig}/sumstats.parquet", True),
-        ot_sumstats_path_fmt=lambda wc: bucket_path("external/ot_nealelab_sumstats/{trait_id}_raw.neale2.gwas.imputed_v3.both_sexes.tsv.gz", True),
-        # TODO: decide how this should be parameterized -- it should be all contigs at some point 
-        contigs="[21]"
+        gwas_sumstats_path=bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/sumstats", True),
+        ot_sumstats_path=bucket_path("external/ot_nealelab_sumstats", True),
+        contigs="[21]",
+        trait_group_ids="[1990,20095]"
     conda: "../envs/gwas.yaml"
     shell:
-        "python scripts/validation.py merge_sumstats "
-        "--gwas-sumstats-path-fmt='{params.gwas_sumstats_path_fmt}' "
-        "--ot-sumstats-path-fmt='{params.ot_sumstats_path_fmt}' "
+        "python scripts/merge_sumstats.py run "
+        "--gwas-sumstats-path={params.gwas_sumstats_path} "
+        "--ot-sumstats-path={params.ot_sumstats_path} "
         "--output-path={output} "
         "--contigs={params.contigs} "
+        "--trait_group_ids={params.trait_group_ids} "

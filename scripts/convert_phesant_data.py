@@ -25,6 +25,7 @@ def to_zarr(input_path: str, output_path: str, dictionary_path: str):
     import dask.dataframe as dd
     import fsspec
     import xarray as xr
+    from dask.diagnostics import ProgressBar
 
     logger.info(f"Converting parquet at {input_path} to {output_path}")
     df = dd.read_parquet(input_path)
@@ -64,13 +65,15 @@ def to_zarr(input_path: str, output_path: str, dictionary_path: str):
     ds = ds.rename_vars({v: f"sample_{v}" for v in ds})
 
     logger.info(f"Saving dataset to {output_path}:\n{ds}")
-    ds.to_zarr(fsspec.get_mapper(output_path), consolidated=True, mode="w")
+    with ProgressBar():
+        ds.to_zarr(fsspec.get_mapper(output_path), consolidated=True, mode="w")
     logger.info("Done")
 
 
 def sort_zarr(input_path: str, genotypes_path: str, output_path: str):
     import fsspec
     import xarray as xr
+    from dask.diagnostics import ProgressBar
 
     ds_tr = xr.open_zarr(fsspec.get_mapper(input_path), consolidated=True)
     ds_gt = xr.open_zarr(fsspec.get_mapper(genotypes_path), consolidated=True)
@@ -84,11 +87,14 @@ def sort_zarr(input_path: str, genotypes_path: str, output_path: str):
     ds = ds.rename_vars({"samples": "sample_id"}).reset_coords("sample_id")
 
     # Restore chunkings; reordered traits array will have many chunks
-    # of size 1 in samples dim without this
+    # of size 1 (or other small sizes) in samples dim without this
     for v in ds_tr:
+        ds[v].encoding.pop("chunks", None)
         ds[v] = ds[v].chunk(ds_tr[v].data.chunksize)
 
-    ds.to_zarr(fsspec.get_mapper(output_path), consolidated=True, mode="w")
+    logger.info(f"Saving dataset to {output_path}:\n{ds}")
+    with ProgressBar():
+        ds.to_zarr(fsspec.get_mapper(output_path), consolidated=True, mode="w")
 
 
 if __name__ == "__main__":

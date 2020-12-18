@@ -1,7 +1,8 @@
 import logging
 import logging.config
 import os
-import warnings
+import time
+import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
 from urllib.parse import urlparse
@@ -15,12 +16,15 @@ import pandas as pd
 import sgkit as sg
 import xarray as xr
 from dask.diagnostics import ProgressBar
-from dask.distributed import Client  # , get_task_stream, performance_report
+from dask.distributed import Client
+from retrying import retry
 from sgkit.io.bgen.bgen_reader import unpack_variables
 from xarray import DataArray, Dataset
 
 logging.config.fileConfig(Path(__file__).resolve().parents[1] / "log.ini")
 logger = logging.getLogger(__name__)
+
+fs = fsspec.filesystem("gs")
 
 
 def init():
@@ -107,18 +111,12 @@ def apply_filters(ds: Dataset, filters: Dict[str, Any], dim: str) -> Dataset:
 
 def add_traits(ds: Dataset, phenotypes_path: str) -> Dataset:
     ds_tr = load_dataset(phenotypes_path, consolidated=True)
-    with warnings.catch_warnings():
-        # Ignore this performance warning since rechunking/reorder the phenotype data is not a big scalability issue
-        warnings.filterwarnings(
-            "ignore",
-            message="Slicing with an out-of-order index is generating .* times more chunks",
-        )
-        ds = ds.assign_coords(samples=lambda ds: ds.sample_id).merge(
-            ds_tr.assign_coords(samples=lambda ds: ds.sample_id),
-            join="left",
-            compat="override",
-        )
-        return ds.reset_index("samples").reset_coords(drop=True)
+    ds = ds.assign_coords(samples=lambda ds: ds.sample_id).merge(
+        ds_tr.assign_coords(samples=lambda ds: ds.sample_id),
+        join="left",
+        compat="override",
+    )
+    return ds.reset_index("samples").reset_coords(drop=True)
 
 
 def add_covariates(ds: Dataset, npc: int = 20) -> Dataset:
@@ -268,15 +266,39 @@ def load_gwas_ds(genotypes_path: str, phenotypes_path: str) -> Dataset:
     return ds
 
 
+def wait_fn(attempts, delay):
+    delay = min(2 ** attempts * 1000, 300000)
+    logger.info(f"Attempt {attempts}, retrying in {delay} ms")
+    return delay
+
+
+def exception_fn(e):
+    logger.error(f"A retriable error occurred: {e}")
+    logger.error("Traceback:\n")
+    logger.error("\n" + "".join(traceback.format_tb(e.__traceback__)))
+    return True
+
+
+@retry(retry_on_exception=exception_fn, wait_func=wait_fn)
 def run_trait_gwas(
-    ds: Dataset, trait_group_id: int, trait_name: str, min_samples: int
+    ds: Dataset,
+    trait_group_id: int,
+    trait_name: str,
+    min_samples: int,
+    retries: int = 3,
 ) -> pd.DataFrame:
     assert ds["sample_trait_group_id"].to_series().nunique() == 1
     assert ds["sample_trait_name"].to_series().nunique() == 1
 
     # Filter to complete cases
+    start = time.perf_counter()
+    n = ds.dims["samples"]
     ds = ds.isel(samples=ds["sample_trait"].notnull().all(dim="traits").values)
+    stop = time.perf_counter()
     sample_size = ds.dims["samples"]
+    logger.info(
+        f"Found {sample_size} complete cases of {n} for '{trait_name}' (id={trait_group_id}) in {stop - start:.1f} seconds"
+    )
 
     # Bypass if sample size too small
     if sample_size < min_samples:
@@ -286,10 +308,10 @@ def run_trait_gwas(
         return None
 
     logger.info(
-        f"Running GWAS for trait '{trait_name}' (id={trait_group_id}) with {sample_size} samples, {ds.dims['traits']} traits"
+        f"Running GWAS for '{trait_name}' (id={trait_group_id}) with {sample_size} samples, {ds.dims['traits']} traits"
     )
 
-    ds = ds.isel(variants=slice(25), samples=slice(100))  # TODO: REMOVE
+    start = time.perf_counter()
     logger.debug(
         f"Input dataset for trait '{trait_name}' (id={trait_group_id}) GWAS:\n{ds}"
     )
@@ -305,26 +327,84 @@ def run_trait_gwas(
 
     # Project and convert to data frame for convenience
     # in downstream analysis/comparisons
-    df = (
-        ds[
-            [
-                "sample_trait_id",
-                "sample_trait_name",
-                "sample_trait_group_id",
-                "sample_trait_code_id",
-                "variant_id",
-                "variant_contig",
-                "variant_contig_name",
-                "variant_p_value",
-                "variant_beta",
-            ]
+    ds = ds[
+        [
+            "sample_trait_id",
+            "sample_trait_name",
+            "sample_trait_group_id",
+            "sample_trait_code_id",
+            "variant_id",
+            "variant_contig",
+            "variant_contig_name",
+            "variant_position",
+            "variant_p_value",
+            "variant_beta",
         ]
-        .to_dataframe()
+    ]
+    ds = ds.compute(retries=retries)
+    df = (
+        ds.to_dataframe()
         .reset_index()
         .assign(sample_size=sample_size)
         .rename(columns={"traits": "trait_index", "variants": "variant_index"})
     )
+    stop = time.perf_counter()
+    logger.info(
+        f"GWAS for '{trait_name}' (id={trait_group_id}) complete in {stop - start:.1f} seconds"
+    )
     return df
+
+
+@retry(retry_on_exception=exception_fn, wait_func=wait_fn)
+def save_gwas_results(df: pd.DataFrame, path: str):
+    start = time.perf_counter()
+    df.to_parquet(path)
+    stop = time.perf_counter()
+    logger.info(f"Save to {path} complete in {stop - start:.1f} seconds")
+
+
+@retry(retry_on_exception=exception_fn, wait_func=wait_fn)
+def run_batch_gwas(
+    ds: xr.Dataset,
+    trait_group_id: str,
+    trait_names: np.ndarray,
+    batch_size: int,
+    min_samples: int,
+    sumstats_path: str,
+):
+    # Determine which individual traits should be regressed as part of this group
+    mask = (ds["sample_trait_group_id"] == trait_group_id).values
+    index = np.sort(np.argwhere(mask).ravel())
+    if len(index) == 0:
+        logger.warning(f"Trait group id {trait_group_id} not found in data (skipping)")
+        return
+    trait_name = trait_names[index][0]
+
+    # Break the traits for this group into batches of some maximum size
+    batches = np.array_split(index, np.ceil(len(index) / batch_size))
+    if len(batches) > 1:
+        logger.info(
+            f"Broke {len(index)} traits for '{trait_name}' (id={trait_group_id}) into {len(batches)} batches"
+        )
+    for batch_index, batch in enumerate(batches):
+        path = f"{sumstats_path}_{batch_index:03d}_{trait_group_id}.parquet"
+        if fs.exists(path):
+            logger.info(
+                f"Results for trait '{trait_name}' (id={trait_group_id}) at path {path} already exist (skipping)"
+            )
+            continue
+        dsg = ds.isel(traits=batch)
+        df = run_trait_gwas(dsg, trait_group_id, trait_name, min_samples=min_samples)
+        if df is None:
+            continue
+        # Write results for all traits in the batch together so that partitions
+        # will have a maximum possible size determined by trait batch size
+        # and number of variants in the current contig
+        df = df.assign(batch_index=batch_index, batch_size=len(batch))
+        logger.info(
+            f"Saving results for trait '{trait_name}' id={trait_group_id}, batch={batch_index} to path {path}"
+        )
+        save_gwas_results(df, path)
 
 
 def run_gwas(
@@ -363,7 +443,9 @@ def run_gwas(
         trait_group_ids = list(map(int, np.unique(ds["sample_trait_group_id"].values)))
     else:
         trait_group_ids = [int(v) for v in trait_group_ids]
-    logger.info(f"Using {len(trait_group_ids)} trait groups")
+    logger.info(
+        f"Using {len(trait_group_ids)} trait groups; first 10: {trait_group_ids[:10]}"
+    )
 
     # Loop through the trait groups and run separate regressions for each.
     # Note that the majority of groups (89%) have only one phenotype/trait
@@ -371,38 +453,14 @@ def run_gwas(
     # large numbers of phenotypes (into the hundreds or thousands).
     trait_names = ds["sample_trait_name"].values
     for trait_group_id in trait_group_ids:
-        # Determine which individual traits should be regressed as part of this group
-        mask = (ds["sample_trait_group_id"] == trait_group_id).values
-        index = np.sort(np.argwhere(mask).ravel())
-        if len(index) == 0:
-            logger.warning(
-                f"Trait group id {trait_group_id} not found in data (skipping)"
-            )
-            continue
-        trait_name = trait_names[index][0]
-
-        # Break the traits for this group into batches of some maximum size
-        batches = np.array_split(index, np.ceil(len(index) / batch_size))
-        if len(batches) > 1:
-            logger.info(
-                f"Broke {len(index)} traits for '{trait_name}' (id={trait_group_id}) into {len(batches)} batches"
-            )
-        for batch_index, batch in enumerate(batches):
-            dsg = ds.isel(traits=batch)
-            df = run_trait_gwas(
-                dsg, trait_group_id, trait_name, min_samples=min_samples
-            )
-            if df is not None:
-                # Write results for all traits in the batch together so that partitions
-                # will have a maximum possible size determined by trait batch size
-                # and number of variants in the current contig
-                df = df.assign(batch_index=batch_index, batch_size=len(batch))
-                path = f"{sumstats_path}_{batch_index:03d}_{trait_group_id}.parquet"
-                logger.info(
-                    f"Saving results for trait '{trait_name}' id={trait_group_id}, "
-                    f"batch={batch_index} to path {path}"
-                )
-                df.to_parquet(path)
+        run_batch_gwas(
+            ds=ds,
+            trait_group_id=trait_group_id,
+            trait_names=trait_names,
+            batch_size=batch_size,
+            min_samples=min_samples,
+            sumstats_path=sumstats_path,
+        )
     logger.info("Sumstat generation complete")
 
     ds = ds[

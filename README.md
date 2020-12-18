@@ -420,7 +420,7 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
 # For the UI, open this tunnel and view locally at localhost:8799: 
 # gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-c5e61972-scheduler --ssh-flag="-L 8799:localhost:8787"
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-9f91547a-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
@@ -499,26 +499,28 @@ snakemake --use-conda --cores=1 --allowed-rules main_csv_phesant_phenotypes_fiel
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/main/ukb_phesant_phenotypes.field_ids.csv
     
-# Convert the phenotype data to parquet
+# Convert the phenotype data to parquet (~45 mins)
 snakemake --use-conda --cores=1 --allowed-rules convert_phesant_csv_to_parquet \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/main/ukb_phesant_phenotypes.parquet.ckpt
     
-# Convert the phenotype data to zarr
+# Convert the phenotype data to zarr (~30 mins)
 snakemake --use-conda --cores=1 --allowed-rules convert_phesant_parquet_to_zarr \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/main/ukb_phesant_phenotypes.zarr.ckpt
     
-# Sort the zarr according to the sample ids in imputed genotyping data
+# Sort the zarr according to the sample ids in imputed genotyping data (~45 mins)
 snakemake --use-conda --cores=1 --allowed-rules sort_phesant_parquet_zarr \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt -np
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt
     
 ```
 
 ## GWAS 
 
 ```
+# Client machine for these steps can be minimal (4 vCPU, 16 GB RAM)
+
 # Copy Neale Lab sumstats from Open Targets
 snakemake --use-conda --cores=1 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
@@ -529,14 +531,20 @@ snakemake --use-conda --cores=1 \
 # If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
 # enough memory is not present or chunksizes suboptimal it can take > 3 hours
 # on 20 n1-highmem-8 nodes.
-snakemake --use-conda --cores=1 --allowed-rules gwas \
+# Logs:
+# chr21, 4 trait groups, 7 traits, 16 mins
+# chr22, 4 trait groups, 7 traits, 10 mins
+snakemake --use-conda --cores=1 --allowed-rules gwas --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{XY,21,22}.ckpt
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{21,22}.ckpt
+
+# To clear: gsutil -m rm -rf gs://rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/{sumstats,variables,*.ckpt}
 
 # Takes ~10 mins on local host
-snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
+snakemake --use-conda --cores=1 --allowed-rules sumstats \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
-    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats.parquet
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/sumstats-1990-20095.parquet
+    
 ```
 
 ## Misc
@@ -552,6 +560,19 @@ snakemake --use-conda --cores=1 --allowed-rules sumstat_merge \
 gcloud auth application-default login
 snakemake --dag data/prep-data/gt-imputation/ukb_chrXY.zarr | dot -Tsvg > dag.svg
 ```
+
+#### Traits
+
+- [5610](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=5610) - Which eye(s) affected by presbyopia (categorical)
+- [50](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=50) - Standing height (continuous)
+- [5183](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=5183) - Current eye infection (binary)
+- [20101](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=20101) - Thickness of butter/margarine spread on bread rolls (categorical)
+- [23098](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=23098) - Weight (continuous)
+- [2395](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=2395) - Hair/balding pattern (categorical)
+
+- [1990](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=1990) - Tense / 'highly strung' (binary)
+- [20095](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=20095) - Size of white wine glass drunk (categorical)
+
 
 ## Development Setup
 
