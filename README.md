@@ -522,9 +522,15 @@ snakemake --use-conda --cores=1 --allowed-rules sort_phesant_parquet_zarr \
 # Client machine for these steps can be minimal (4 vCPU, 16 GB RAM)
 
 # Copy Neale Lab sumstats from Open Targets
-snakemake --use-conda --cores=1 \
+snakemake --use-conda --cores=1 --allowed-rules import_ot_nealelab_sumstats \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/external/ot_nealelab_sumstats/copy.ckpt
+    
+# Generate list of traits for GWAS based on intersection of 
+# PHESANT results and OT sumstats
+snakemake --use-conda --cores=1 --allowed-rules trait_group_ids \
+    --default-remote-provider GS --default-remote-prefix rs-ukb \
+    rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/trait_group_ids.csv
     
 # Generate sumstats using sgkit    
 # See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step.

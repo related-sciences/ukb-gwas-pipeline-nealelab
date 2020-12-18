@@ -30,6 +30,23 @@ rule qc_filter_stage_2:
         "--output-path={params.output_path} "
         "&& touch {output}"
 
+# Generate list of traits to run GWAS for
+rule trait_group_ids:
+    input:
+        sumstats_ckpt="external/ot_nealelab_sumstats/copy.ckpt",
+        phenotypes_ckpt="pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.ckpt"
+    output: "pipe/nealelab-gwas-uni-ancestry-v3/input/trait_group_ids.csv"
+    params:
+        phenotypes_path=bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.zarr", True),
+        sumstats_path=bucket_path("external/ot_nealelab_sumstats", True)
+    conda: "../envs/gwas.yaml"
+    shell:
+        "python scripts/extract_trait_group_ids.py run "
+        "--phenotypes-path={params.phenotypes_path} "
+        "--sumstats-path={params.sumstats_path} "
+        "--output-path={output} "
+        
+    
 # Run regressions
 rule gwas:
     input:
@@ -39,9 +56,10 @@ rule gwas:
         "pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{bgen_contig}.ckpt"
     params:
         genotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{wc.bgen_contig}.zarr", True),
-        phenotypes_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.zarr", True),
+        phenotypes_path=bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/input/main/ukb_phesant_phenotypes.zarr", True),
         sumstats_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/sumstats/ukb_chr{wc.bgen_contig}", True),
-        variables_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/variables/ukb_chr{wc.bgen_contig}", True)
+        variables_path=lambda wc: bucket_path(f"pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/variables/ukb_chr{wc.bgen_contig}", True),
+        trait_group_ids=bucket_path("pipe/nealelab-gwas-uni-ancestry-v3/input/trait_group_ids.csv", True)
     conda: "../envs/gwas.yaml"
     shell:
         "python scripts/gwas.py run_gwas "
@@ -49,6 +67,7 @@ rule gwas:
         "--phenotypes-path={params.phenotypes_path} "
         "--sumstats-path={params.sumstats_path} "
         "--variables-path={params.variables_path} "
+        "--trait-group-ids={params.trait_group_ids} "
         "&& touch {output}"
 
 # "--trait-group-ids=[1990,20095] "

@@ -413,7 +413,7 @@ def run_gwas(
     sumstats_path: str,
     variables_path: str,
     batch_size: int = 100,
-    trait_group_ids: Optional[Sequence[Union[str, int]]] = None,
+    trait_group_ids: Optional[Union[Sequence[Union[str, int]], str]] = None,
     min_samples: int = 100,
 ):
     init()
@@ -440,8 +440,15 @@ def run_gwas(
     # Determine the UKB field ids corresponding to all phenotypes to be used
     # * a `trait_group_id` is equivalent to a UKB field id
     if trait_group_ids is None:
+        # Use all known traits
         trait_group_ids = list(map(int, np.unique(ds["sample_trait_group_id"].values)))
+    elif isinstance(trait_group_ids, str):
+        # Load from file
+        trait_group_ids = [
+            int(v) for v in pd.read_csv(trait_group_ids, sep="\t")["trait_group_id"]
+        ]
     else:
+        # Assume a sequence was provided
         trait_group_ids = [int(v) for v in trait_group_ids]
     logger.info(
         f"Using {len(trait_group_ids)} trait groups; first 10: {trait_group_ids[:10]}"
