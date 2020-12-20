@@ -203,11 +203,11 @@ Ensure that the same versions are in [docker/Dockerfile](docker/Dockerfile) as w
 ```
 DOCKER_USER=<user>
 DOCKER_PWD=<password>
-DOCKER_TAG="v2.30.0" # Dask version
+DOCKER_TAG="v2020.12.0" # Dask version
 cd docker
-docker build -t eczech/ukb-gwas-pipeline-nealelab:v2.30.0 .
+docker build -t eczech/ukb-gwas-pipeline-nealelab:v2020.12.0 .
 echo $DOCKER_PWD | docker login --username $DOCKER_USER --password-stdin
-docker push eczech/ukb-gwas-pipeline-nealelab:v2.30.0
+docker push eczech/ukb-gwas-pipeline-nealelab:v2020.12.0
 ```
 
 **Important**: Update the desired docker image tag in [config/dask/cloudprovider.sh](config/dask/cloudprovider.sh).
@@ -254,7 +254,7 @@ Build 'googlecompute' finished after 1 minute 46 seconds.
 ==> Wait completed after 1 minute 46 seconds
 
 ==> Builds finished. The artifacts of successful builds are:
---> googlecompute: A disk image was created: ukb-gwas-pipeline-nealelab-dask-1607640553
+--> googlecompute: A disk image was created: ukb-gwas-pipeline-nealelab-dask-1608465809
 ```
 
 4. Test the new image.
@@ -266,7 +266,7 @@ gcloud compute instances create test-image \
   --project $GCP_PROJECT \
   --zone $GCP_ZONE \
   --image-project $GCP_PROJECT \
-  --image ukb-gwas-pipeline-nealelab-dask-1607640553
+  --image ukb-gwas-pipeline-nealelab-dask-1608465809
 ```
 
 This is particularly useful for checking that the GCP monitoring agent was installed correctly.
@@ -276,7 +276,7 @@ Then, you can create a Dask cluster to test with like this:
 ```
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cluster/cloudprovider.py -- --interactive
-create(1, machine_type='n1-highmem-8', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
+create(1, machine_type='n1-highmem-2', source_image="ukb-gwas-pipeline-nealelab-dask-1608465809", bootstrap=False)
 adapt(0, 5)
 export_scheduler_info()
 
@@ -408,7 +408,7 @@ screen -S cluster
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cluster/cloudprovider.py -- --interactive
-create(1, machine_type='n1-highmem-16', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
+create(1, machine_type='n1-highmem-16', source_image="ukb-gwas-pipeline-nealelab-dask-1608465809", bootstrap=False)
 adapt(0, 50, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
 # Run the workflows
