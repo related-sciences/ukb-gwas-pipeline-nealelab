@@ -368,24 +368,16 @@ snakemake --kubernetes --use-conda --cores=2 --local-cores=1 --restart-times 3 \
     rs-ukb/prep/gt-imputation/ukb_chr{21,22}.ckpt
 # Expecting running time (8 vCPUs): 12 - 14 hours
 
-# Run all chromosomes
-# timings on 32 vCPUs:
-# chr20/19 - 5 hrs
-# chr18/17 - 6 hrs
-# chr16 - 6 hrs 40 mins
-# timings on 64 vCPUs:
-# chr12 - 7.75 hrs
-# chr7 - 9 hrs
-# chr11 - 8 hrs
-# chr4 - 9 hrs 50 mins
+# Takes ~12 hours for chr 1 on 64 vCPU / 262 GiB RAM / 1TB disk instances.
 # Common reasons for failures:
-# https://github.com/dask/gcsfs/issues/315
-# https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/20
+# - https://github.com/dask/gcsfs/issues/315
+# - https://github.com/related-sciences/ukb-gwas-pipeline-nealelab/issues/20
 gcloud container clusters resize $GKE_IO_NAME --node-pool default-pool --num-nodes 5 --zone $GCP_ZONE
 snakemake --kubernetes --use-conda --cores=5 --local-cores=1 --restart-times 3 \
 --default-remote-provider GS --default-remote-prefix rs-ukb \
-rs-ukb/prep/gt-imputation/ukb_chr{1,2,3,4,5,6,8,9,10,13,14,15}.ckpt
+rs-ukb/prep/gt-imputation/ukb_chr{1,2,3,4,5,6,8,9,10}.ckpt
 
+# Run on all chromosomes
 snakemake --kubernetes --use-conda --cores=5 --local-cores=1 --restart-times 3 \
 --default-remote-provider GS --default-remote-prefix rs-ukb --allowed-rules bgen_to_zarr -np
 
@@ -425,30 +417,15 @@ echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 echo "gcloud beta compute ssh --zone us-east1-c $DASK_SCHEDULER_HOST --ssh-flag=\"-L 8799:localhost:8787\""
 # e.g. gcloud beta compute ssh --zone us-east1-c dask-6ebe0412-scheduler --ssh-flag="-L 8799:localhost:8787"
     
-# Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
-# Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
-# Chr 12 took 28 mins on 50 n1-highmem-8 nodes (adaptive)
-# Chr 17 took 10 mins on 50 n1-highmem-8 nodes (fixed cluster)
-# Chr 20 took 9 mins on 50 n1-highmem-8 nodes (fixed cluster)
-# Chr 19 took 8 mins on 50 n1-highmem-8 nodes (fixed cluster)
-# Chr 14 took 20 mins on 67 n1-highmem-8 nodes (fixed cluster after failed rescale from 50)
-# Chr 18 took 12 mins on 67 n1-highmem-8 nodes (fixed cluster after failed rescale from 50)
-# Chr 11 took 22 mins on 65 n1-highmem-8 nodes (fresh fixed cluster)
-# Chr 9 took 19 mins on 61 n1-highmem-16 nodes (fresh fixed)
-# Chr 4 took 59 mins on 61 n1-highmem-16 nodes (fresh fixed)
-# Chr 7 took 45 mins on 61 n1-highmem-16 nodes
-# Chr 13 took 19 mins on 61 n1-highmem-16 nodes
-# Chr 2 took 58 mins on 60 n1-highmem-16 nodes
+# Takes ~25 mins for either chr 21/22 on 20 n1-standard-8 nodes.
+# Takes ~58 mins for chr 2 on 60 n1-highmem-16 nodes.
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_1 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/prep/gt-imputation-qc/ukb_chr{1,2,3,4,5,6,7,8,9,10,13,16}.ckpt
     
 
-# Takes ~25-30 mins for 21/22 on 20 n1-standard-8 nodes
-# Takes ~12 mins for chr 21 on 40 n1-highmem-8 nodes
-# Takes ~6 mins for chr 21 on 60 n1-highmem-16 nodes
+# Takes ~25-30 mins for chr 21/22 on 20 n1-standard-8 nodes
 # Takes ~52 mins for chr 6 on 60 n1-highmem-16 nodes
-# Takes ~20 mins for chr 8 on 60 n1-highmem-16 nodes
 snakemake --use-conda --cores=1 --allowed-rules qc_filter_stage_2 --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/input/gt-imputation/ukb_chr{XY,21,22}.ckpt
@@ -522,7 +499,9 @@ snakemake --use-conda --cores=1 --allowed-rules sort_phesant_parquet_zarr \
 ## GWAS 
 
 ```
-# Client machine for these steps can be minimal (4 vCPU, 16 GB RAM)
+# Notes: 
+# - Client machine for these steps can be minimal (4 vCPU, 16 GB RAM)
+# - A dask cluster should be created first as it was in the GWAS QC steps
 
 # Copy Neale Lab sumstats from Open Targets
 snakemake --use-conda --cores=1 --allowed-rules import_ot_nealelab_sumstats \
@@ -537,15 +516,6 @@ snakemake --use-conda --cores=1 --allowed-rules trait_group_ids \
     
 # Generate sumstats using sgkit    
 # See https://github.com/pystatgen/sgkit/issues/390 for timing information on this step.
-# If all goes well, this should only take ~10 minutes (per phenotype) for chr 21 but if 
-# enough memory is not present or chunksizes suboptimal it can take > 3 hours
-# on 20 n1-highmem-8 nodes.
-# Logs:
-# chr21, 4 trait groups, 7 traits, 16 mins
-# chr22, 4 trait groups, 7 traits, 10 mins
-# chr22 sample: 206 +/- 12 seconds (12 = 1 stddev) (142510 variants)
-# chr21 sample: 2m 10s, 1m 59s, 2m 29s, 2m 25s, 2m 39s = 140s (141910 variants)
-# 
 snakemake --use-conda --cores=1 --allowed-rules gwas --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{21,22}.ckpt
@@ -575,15 +545,22 @@ snakemake --dag data/prep-data/gt-imputation/ukb_chrXY.zarr | dot -Tsvg > dag.sv
 
 #### Traits
 
+This is a list of UKB traits that can be useful for testing or better understanding data coding schemes and PHESANT phenotype generation (or that are just entertaining):
+
 - [5610](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=5610) - Which eye(s) affected by presbyopia (categorical)
 - [50](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=50) - Standing height (continuous)
 - [5183](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=5183) - Current eye infection (binary)
 - [20101](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=20101) - Thickness of butter/margarine spread on bread rolls (categorical)
 - [23098](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=23098) - Weight (continuous)
 - [2395](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=2395) - Hair/balding pattern (categorical)
-
 - [1990](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=1990) - Tense / 'highly strung' (binary)
 - [20095](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=20095) - Size of white wine glass drunk (categorical)
+- [845](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=845) - Age completed full time education (continuous)
+- [1160](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=1160) - Sleep duration (continuous)
+- [4041](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=4041) - Gestational diabetes only (binary)
+- [738](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=738) - Average total household income before tax (categorical)
+- [1100](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=1100) - Drive faster than motorway speed limit (categorical)
+- [1100](https://biobank.ctsu.ox.ac.uk/crystal/field.cgi?id=1150) - Usual side of head for mobile phone use (categorical)
 
 
 ## Development Setup

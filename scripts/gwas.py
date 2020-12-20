@@ -445,7 +445,7 @@ def run_gwas(
     # variants dimension since variant_chunk x n_sample arrays need to
     # fit in memory for linear regression (652 * 365941 * 4 = 954MB)
     # See: https://github.com/pystatgen/sgkit/issues/390
-    # ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
+    ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
 
     logger.info(f"Loaded dataset:\n{ds}")
 
