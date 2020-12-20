@@ -269,7 +269,9 @@ gcloud compute instances create test-image \
   --image ukb-gwas-pipeline-nealelab-dask-1607640553
 ```
 
-You can create a Dask cluster to test with like this:
+This is particularly useful for checking that the GCP monitoring agent was installed correctly.
+
+Then, you can create a Dask cluster to test with like this:
 
 ```
 source env.sh; source .env; source config/dask/cloudprovider.sh
@@ -406,7 +408,7 @@ screen -S cluster
 conda activate cloudprovider
 source env.sh; source .env; source config/dask/cloudprovider.sh
 python scripts/cluster/cloudprovider.py -- --interactive
-create(0, machine_type='n1-highmem-16', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
+create(1, machine_type='n1-highmem-16', source_image="ukb-gwas-pipeline-nealelab-dask-1607640553", bootstrap=False)
 adapt(0, 50, interval="60s"); export_scheduler_info(); # Set interval to how long nodes should live between uses
 
 # Run the workflows
@@ -418,9 +420,10 @@ export DASK_SCHEDULER_HOST=`cat /tmp/scheduler-info.txt | grep hostname | cut -d
 export DASK_SCHEDULER_ADDRESS=tcp://$DASK_SCHEDULER_IP:8786
 echo $DASK_SCHEDULER_HOST $DASK_SCHEDULER_ADDRESS
 
-# For the UI, open this tunnel and view locally at localhost:8799: 
-# gcloud beta compute ssh --zone $GCP_ZONE $DASK_SCHEDULER_HOST --ssh-flag="-L 8799:localhost:8787"
-# e.g. gcloud beta compute ssh --zone us-east1-c dask-9f91547a-scheduler --ssh-flag="-L 8799:localhost:8787"
+# For the UI, open a tunnel by running this command on your local
+# workstation before visiting localhost:8799 :
+echo "gcloud beta compute ssh --zone us-east1-c $DASK_SCHEDULER_HOST --ssh-flag=\"-L 8799:localhost:8787\""
+# e.g. gcloud beta compute ssh --zone us-east1-c dask-6ebe0412-scheduler --ssh-flag="-L 8799:localhost:8787"
     
 # Takes ~25 mins for either 21 or 22 on 20 n1-standard-8 nodes
 # Takes ~19 mins for either 21 or 22 on 40 n1-standard-8 nodes
@@ -540,6 +543,9 @@ snakemake --use-conda --cores=1 --allowed-rules trait_group_ids \
 # Logs:
 # chr21, 4 trait groups, 7 traits, 16 mins
 # chr22, 4 trait groups, 7 traits, 10 mins
+# chr22 sample: 206 +/- 12 seconds (12 = 1 stddev) (142510 variants)
+# chr21 sample: 2m 10s, 1m 59s, 2m 29s, 2m 25s, 2m 39s = 140s (141910 variants)
+# 
 snakemake --use-conda --cores=1 --allowed-rules gwas --restart-times 3 \
     --default-remote-provider GS --default-remote-prefix rs-ukb \
     rs-ukb/pipe/nealelab-gwas-uni-ancestry-v3/output/gt-imputation/ukb_chr{21,22}.ckpt

@@ -31,4 +31,6 @@ dependencies:
         - cbgen==0.1.6
         - rechunker==0.3.1
         - bed-reader==0.1.1
-        - git+https://github.com/pystatgen/sgkit.git@c5548821653fa2759421668092716d2036834ffe#egg=sgkit
+        # - git+https://github.com/pystatgen/sgkit.git@c5548821653fa2759421668092716d2036834ffe#egg=sgkit
+        # Update to use tensordot in gwas
+        - git+https://github.com/eric-czech/sgkit.git@78da833c4f8902c6dd4e45a889cf835f0acfc065#egg=sgkit

@@ -16,7 +16,7 @@ import pandas as pd
 import sgkit as sg
 import xarray as xr
 from dask.diagnostics import ProgressBar
-from dask.distributed import Client
+from dask.distributed import Client, get_task_stream, performance_report
 from retrying import retry
 from sgkit.io.bgen.bgen_reader import unpack_variables
 from xarray import DataArray, Dataset
@@ -284,6 +284,7 @@ def run_trait_gwas(
     ds: Dataset,
     trait_group_id: int,
     trait_name: str,
+    batch_index: int,
     min_samples: int,
     retries: int = 3,
 ) -> pd.DataFrame:
@@ -341,7 +342,16 @@ def run_trait_gwas(
             "variant_beta",
         ]
     ]
-    ds = ds.compute(retries=retries)
+
+    if os.getenv("GENERATE_PERFORMANCE_REPORT", "").lower() == "true":
+        with performance_report(
+            f"logs/reports/pr_{trait_group_id}_{batch_index}.html"
+        ), get_task_stream(
+            plot="save", filename=f"logs/reports/ts_{trait_group_id}_{batch_index}.html"
+        ):
+            ds = ds.compute(retries=retries)
+    else:
+        ds = ds.compute(retries=retries)
     df = (
         ds.to_dataframe()
         .reset_index()
@@ -394,7 +404,9 @@ def run_batch_gwas(
             )
             continue
         dsg = ds.isel(traits=batch)
-        df = run_trait_gwas(dsg, trait_group_id, trait_name, min_samples=min_samples)
+        df = run_trait_gwas(
+            dsg, trait_group_id, trait_name, batch_index, min_samples=min_samples
+        )
         if df is None:
             continue
         # Write results for all traits in the batch together so that partitions
@@ -433,7 +445,7 @@ def run_gwas(
     # variants dimension since variant_chunk x n_sample arrays need to
     # fit in memory for linear regression (652 * 365941 * 4 = 954MB)
     # See: https://github.com/pystatgen/sgkit/issues/390
-    ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
+    # ds["call_dosage"] = ds["call_dosage"].chunk(chunks=(652, 5792))
 
     logger.info(f"Loaded dataset:\n{ds}")
 
