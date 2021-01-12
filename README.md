@@ -18,6 +18,11 @@ The development VM should be used to issue snakemake commands and will run some 
 ## Setup
 
 - Create an `n1-standard-8` GCE instance w/ Debian 10 (buster) OS
+- Install NTP (so time is correct after pausing VM):
+
+```bash
+sudo apt-get install -y ntp
+```
 - [Install conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
 - Initialize the `snakemake` environment, which will provide the CLI from which most other commands will be run:
 
@@ -141,7 +146,7 @@ conda activate cloudprovider
 
 source env.sh; source .env
 source config/dask/cloudprovider.sh
-python scripts/cloudprovider.py -- --interactive
+python scripts/cluster/cloudprovider.py -- --interactive
 
 >>> create(n_workers=1)
 Launching cluster with the following configuration:
@@ -170,8 +175,12 @@ dask-9347b93f-worker-4cc3cb6e
 >>> adapt(0, 5, interval="60s", wait_count=3)
 distributed.deploy.adaptive - INFO - Adaptive scaling started: minimum=0 maximum=5
 
->>> close()
+>>> export_scheduler_info()
+Scheduler info exported to /tmp/scheduler-info.txt
+
+>>> shutdown()
 Closing Instance: dask-9347b93f-scheduler
+Cluster shutdown
 ```
 
 To see the Dask UI for this cluster, run this on any workstation (outside of GCP):
@@ -308,6 +317,15 @@ Note that you can preview the effects of any snakemake command below by adding `
 conda activate snakemake
 source env.sh; source .env
 ```
+
+To get static HTML [performance reports](https://distributed.dask.org/en/latest/diagnosing-performance.html#performance-reports), which are suitable for sharing, do
+
+```bash
+mkdir -p logs/reports
+export GENERATE_PERFORMANCE_REPORT=True
+```
+
+The the reports can be found in `logs/reports`.
 
 ## Main UKB dataset integration
 
